@@ -19,6 +19,7 @@ const INITIAL_PROGRESS: UserProgress = {
   },
   currentDifficulty: 'easy',
   reports: [],
+  materialMastery: {},
 };
 
 const SUB_TEST_CONFIGS = [
@@ -36,7 +37,11 @@ const SUB_TEST_CONFIGS = [
 export function useQuiz() {
   const [progress, setProgress] = useState<UserProgress>(() => {
     const saved = localStorage.getItem(STORAGE_KEY);
-    return saved ? JSON.parse(saved) : INITIAL_PROGRESS;
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      return { ...INITIAL_PROGRESS, ...parsed, materialMastery: parsed.materialMastery ?? {} };
+    }
+    return INITIAL_PROGRESS;
   });
 
   const [session, setSession] = useState<QuizSession | null>(null);
@@ -379,7 +384,8 @@ export function useQuiz() {
         },
         categoryStats: updatedStats,
         currentDifficulty: newDifficulty,
-        reports: [report, ...prev.reports].slice(0, 10), // Keep last 10 reports
+        materialMastery: { ...(prev.materialMastery ?? {}), ...materialMastery },
+        reports: [report, ...prev.reports].slice(0, 10),
       };
     });
 

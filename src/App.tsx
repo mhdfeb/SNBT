@@ -101,6 +101,146 @@ const QuestionArea = React.memo(({ question, session, answerQuestion }: {
   session: QuizSession; 
   answerQuestion: (answer: any) => void;
 }) => {
+  const currentAnswer = session.answers[question.id];
+  const isSubmitted = session.isSubmitted;
+
+  const renderMultipleChoice = () => (
+    <div className="space-y-3">
+      {question.options?.map((option, idx) => {
+        const isSelected = currentAnswer === idx;
+        const isCorrect = question.correctAnswer === idx;
+        let optionClass = "w-full text-left p-5 rounded-2xl border-2 font-medium transition-all flex items-start gap-4";
+        if (isSubmitted) {
+          if (isCorrect) optionClass += " bg-green-50 border-green-400 text-green-800";
+          else if (isSelected && !isCorrect) optionClass += " bg-red-50 border-red-400 text-red-800";
+          else optionClass += " bg-slate-50 border-slate-200 text-slate-500";
+        } else {
+          if (isSelected) optionClass += " bg-indigo-50 border-indigo-400 text-indigo-800";
+          else optionClass += " bg-white border-slate-200 hover:border-indigo-300 hover:bg-indigo-50/30 text-slate-700";
+        }
+        return (
+          <button key={idx} className={optionClass} onClick={() => !isSubmitted && answerQuestion(idx)} disabled={isSubmitted}>
+            <span className="font-black text-xs mt-0.5 min-w-[20px]">{String.fromCharCode(65 + idx)}.</span>
+            <ReactMarkdown className="prose prose-sm max-w-none">{option}</ReactMarkdown>
+            {isSubmitted && isCorrect && <CheckCircle2 size={18} className="ml-auto text-green-500 shrink-0 mt-0.5" />}
+            {isSubmitted && isSelected && !isCorrect && <XCircle size={18} className="ml-auto text-red-500 shrink-0 mt-0.5" />}
+          </button>
+        );
+      })}
+    </div>
+  );
+
+  const renderComplexMultipleChoice = () => {
+    const answers: boolean[] = Array.isArray(currentAnswer) ? currentAnswer : Array(question.complexOptions?.length ?? 0).fill(undefined);
+    return (
+      <div className="space-y-3">
+        <p className="text-xs text-slate-500 font-semibold uppercase tracking-widest">Pilih Benar/Salah untuk setiap pernyataan:</p>
+        {question.complexOptions?.map((opt, idx) => {
+          const userAnswer = answers[idx];
+          const isCorrect = opt.correct;
+          let rowClass = "p-5 rounded-2xl border-2 transition-all";
+          if (isSubmitted) {
+            rowClass += userAnswer === isCorrect ? " bg-green-50 border-green-300" : " bg-red-50 border-red-300";
+          } else {
+            rowClass += " bg-white border-slate-200";
+          }
+          return (
+            <div key={idx} className={rowClass}>
+              <ReactMarkdown className="prose prose-sm max-w-none text-slate-700 mb-3">{opt.statement}</ReactMarkdown>
+              <div className="flex gap-3">
+                {[true, false].map((val) => {
+                  const label = val ? 'Benar' : 'Salah';
+                  const isSelected = userAnswer === val;
+                  let btnClass = "flex-1 py-2 rounded-xl font-bold text-sm border-2 transition-all";
+                  if (isSubmitted) {
+                    if (val === isCorrect) btnClass += " bg-green-500 border-green-500 text-white";
+                    else if (isSelected) btnClass += " bg-red-400 border-red-400 text-white";
+                    else btnClass += " bg-slate-100 border-slate-200 text-slate-400";
+                  } else {
+                    if (isSelected) btnClass += " bg-indigo-600 border-indigo-600 text-white";
+                    else btnClass += " bg-slate-100 border-slate-200 text-slate-600 hover:border-indigo-300";
+                  }
+                  return (
+                    <button key={String(val)} className={btnClass} disabled={isSubmitted} onClick={() => {
+                      const newAnswers = [...answers];
+                      newAnswers[idx] = val;
+                      answerQuestion(newAnswers);
+                    }}>{label}</button>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+
+  const renderShortAnswer = () => {
+    const isCorrect = isSubmitted && Number(currentAnswer) === question.shortAnswerCorrect;
+    return (
+      <div className="space-y-4">
+        <p className="text-xs text-slate-500 font-semibold uppercase tracking-widest">Masukkan jawaban angka:</p>
+        <input
+          type="number"
+          value={currentAnswer ?? ''}
+          onChange={(e) => !isSubmitted && answerQuestion(Number(e.target.value))}
+          disabled={isSubmitted}
+          placeholder="Jawaban..."
+          className={cn(
+            "w-full p-5 rounded-2xl border-2 text-lg font-bold outline-none transition-all",
+            isSubmitted
+              ? isCorrect ? "bg-green-50 border-green-400 text-green-800" : "bg-red-50 border-red-400 text-red-800"
+              : "bg-white border-slate-200 focus:border-indigo-400 text-slate-800"
+          )}
+        />
+        {isSubmitted && (
+          <p className="text-sm font-semibold">
+            Jawaban benar: <span className="text-green-700 font-black">{question.shortAnswerCorrect}</span>
+          </p>
+        )}
+      </div>
+    );
+  };
+
+  return (
+    <motion.div
+      key={question.id}
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -12 }}
+      transition={{ duration: 0.25 }}
+      className="space-y-8"
+    >
+      <div className="space-y-4">
+        <div className="flex items-center gap-2 flex-wrap">
+          <DifficultyBadge difficulty={question.difficulty} />
+          <span className="text-xs font-semibold text-slate-400 bg-slate-100 px-3 py-1 rounded-full">{question.category}</span>
+          <span className="text-xs font-semibold text-slate-400 bg-slate-100 px-3 py-1 rounded-full">{question.concept}</span>
+          <QuestionTimer isSubmitted={session.isSubmitted} currentIdx={session.currentIdx} />
+        </div>
+        <div className="prose prose-slate max-w-none">
+          <ReactMarkdown>{question.question}</ReactMarkdown>
+        </div>
+      </div>
+      <div>
+        {question.type === 'multiple_choice' && renderMultipleChoice()}
+        {question.type === 'complex_multiple_choice' && renderComplexMultipleChoice()}
+        {question.type === 'short_answer' && renderShortAnswer()}
+      </div>
+      {isSubmitted && (
+        <div className="bg-indigo-50 border border-indigo-200 rounded-2xl p-6 space-y-2">
+          <div className="flex items-center gap-2 text-indigo-700 font-black text-sm uppercase tracking-widest">
+            <Info size={16} /> Pembahasan
+          </div>
+          <div className="prose prose-sm max-w-none text-indigo-900">
+            <ReactMarkdown>{question.explanation}</ReactMarkdown>
+          </div>
+        </div>
+      )}
+    </motion.div>
+  );
+});
 
 // --- Main App ---
 
@@ -480,8 +620,6 @@ export default function App() {
                   session={session}
                   answerQuestion={answerQuestion}
                 />
-              </AnimatePresence>
-            </div>
               </AnimatePresence>
             </div>
 
