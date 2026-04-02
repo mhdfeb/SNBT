@@ -1,6 +1,7 @@
 import { Question } from '../../types/quiz';
+import { withBlueprintMetadata } from './quality';
 
-export const HOTS_QUESTIONS: Question[] = [
+export const HOTS_QUESTIONS: Question[] = withBlueprintMetadata([
   // --- HOTS: Penalaran Induktif ---
   {
     id: 'pi-hots-1',
@@ -136,4 +137,4 @@ export const HOTS_QUESTIONS: Question[] = [
     explanation: 'Kalimat tersebut menekankan bahwa meskipun dana besar, efektivitas dipertanyakan KARENA distribusi tidak tepat sasaran. Ini menyiratkan bahwa distribusi adalah faktor penentu efektivitas.',
     irtParams: { difficulty: 2.2, discrimination: 1.8, guessing: 0.2 }
   }
-];
+]);

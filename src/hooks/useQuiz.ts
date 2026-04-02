@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Question, UserProgress, QuizSession, Difficulty, Category, AssessmentReport } from '../types/quiz';
+import { Question, UserProgress, QuizSession, Difficulty, Category, AssessmentReport, QuestionPerformanceStat } from '../types/quiz';
 import { QUESTIONS } from '../data/questions';
-import { calculateIRTScore, getNationalStats } from '../lib/irt';
+import { applyTryoutEquating, calculateIRTScore, getNationalStats } from '../lib/irt';
 import { PTN_DATA } from '../data/ptn';
 
 const STORAGE_KEY = 'ppu_master_progress_v3';
@@ -20,6 +20,7 @@ const INITIAL_PROGRESS: UserProgress = {
   currentDifficulty: 'easy',
   reports: [],
   materialMastery: {},
+  questionPerformance: {},
 };
 
 const SUB_TEST_CONFIGS = [
@@ -33,6 +34,27 @@ const SUB_TEST_CONFIGS = [
   { name: 'Literasi Bahasa Inggris', category: 'Literasi Inggris', count: 20, time: 900 },
   { name: 'Penalaran Matematika', category: 'Penalaran Matematika', count: 20, time: 1800 },
 ];
+
+const TRYOUT_PACKAGES = ['TO-A', 'TO-B', 'TO-C'];
+
+function evaluateQuestionFlags(stat: QuestionPerformanceStat): string[] {
+  const flags: string[] = [];
+
+  if (stat.pValue > 0.9) flags.push('too_easy');
+  if (stat.pValue < 0.2) flags.push('too_hard');
+  if (stat.discriminationIndex < 0.15) flags.push('low_discrimination');
+
+  const ineffectiveDistractors = stat.distractorStats.filter(d => !d.isEffective).length;
+  if (stat.distractorStats.length > 0 && ineffectiveDistractors >= Math.ceil(stat.distractorStats.length / 2)) {
+    flags.push('ineffective_distractors');
+  }
+
+  if (stat.pValue >= 0.4 && stat.pValue <= 0.7 && stat.discriminationIndex < 0.1) {
+    flags.push('potentially_ambiguous');
+  }
+
+  return flags;
+}
 
 export function useQuiz() {
   const [progress, setProgress] = useState<UserProgress>(() => {
@@ -170,6 +192,10 @@ export function useQuiz() {
       ? subTests.map((st, i) => i === 0 ? { ...st, expiresAt: Date.now() + st.timeLimit * 1000 } : st)
       : subTests;
 
+    const packageId = mode === 'tryout'
+      ? TRYOUT_PACKAGES[Math.floor(Math.random() * TRYOUT_PACKAGES.length)]
+      : undefined;
+
     setSession({
       mode,
       selectedCategory: category,
@@ -182,6 +208,7 @@ export function useQuiz() {
       isSubmitted: false,
       subTests: mode === 'tryout' ? finalSubTests : undefined,
       currentSubTestIdx: mode === 'tryout' ? 0 : undefined,
+      packageId,
     });
   }, [progress]);
 
@@ -277,10 +304,11 @@ export function useQuiz() {
     const today = new Date().toISOString().split('T')[0];
 
     // IRT Scoring
-    const irtScore = calculateIRTScore(results.map(r => ({
+    const rawIrtScore = calculateIRTScore(results.map(r => ({
       correct: r.correct,
       irtParams: r.irtParams
     })));
+    const irtScore = applyTryoutEquating(rawIrtScore, session.packageId);
 
     const { rank, percentile, totalParticipants } = getNationalStats(irtScore);
 
@@ -348,6 +376,10 @@ export function useQuiz() {
       const newWrongIds = [...prev.wrongIds];
       const newCompletedIds = [...prev.completedIds];
       const updatedStats = { ...prev.categoryStats };
+      const nextQuestionPerformance = { ...(prev.questionPerformance ?? {}) };
+      const attemptAccuracy = correctCount / (session.questions.length || 1);
+      const isHighGroup = attemptAccuracy >= 0.7;
+      const isLowGroup = attemptAccuracy <= 0.4;
 
       results.forEach(r => {
         updatedStats[r.category].total += 1;
@@ -359,6 +391,66 @@ export function useQuiz() {
         } else {
           if (!newWrongIds.includes(r.id)) newWrongIds.push(r.id);
         }
+
+        const question = session.questions.find(q => q.id === r.id);
+        const answer = session.answers[r.id];
+        const existing = nextQuestionPerformance[r.id];
+        const optionCount = question?.options?.length ?? 0;
+        const baseSelections = existing?.optionSelections?.length === optionCount
+          ? [...existing.optionSelections]
+          : Array(optionCount).fill(0);
+
+        if (question?.type === 'multiple_choice' && typeof answer === 'number' && baseSelections[answer] !== undefined) {
+          baseSelections[answer] += 1;
+        }
+
+        const attempts = (existing?.attempts ?? 0) + 1;
+        const correctAttempts = (existing?.correctAttempts ?? 0) + (r.correct ? 1 : 0);
+        const highGroupAttempts = (existing?.highGroupAttempts ?? 0) + (isHighGroup ? 1 : 0);
+        const highGroupCorrect = (existing?.highGroupCorrect ?? 0) + (isHighGroup && r.correct ? 1 : 0);
+        const lowGroupAttempts = (existing?.lowGroupAttempts ?? 0) + (isLowGroup ? 1 : 0);
+        const lowGroupCorrect = (existing?.lowGroupCorrect ?? 0) + (isLowGroup && r.correct ? 1 : 0);
+
+        const pValue = correctAttempts / attempts;
+        const highRate = highGroupAttempts ? highGroupCorrect / highGroupAttempts : 0;
+        const lowRate = lowGroupAttempts ? lowGroupCorrect / lowGroupAttempts : 0;
+        const discriminationIndex = highRate - lowRate;
+        const wrongAttempts = Math.max(1, attempts - correctAttempts);
+
+        const distractorStats = (question?.options ?? [])
+          .map((_, optionIndex) => {
+            if (question.correctAnswer === optionIndex) return null;
+            const selectedCount = baseSelections[optionIndex] ?? 0;
+            const selectedRate = selectedCount / wrongAttempts;
+            return {
+              optionIndex,
+              selectedCount,
+              selectedRate,
+              isEffective: selectedRate >= 0.05,
+            };
+          })
+          .filter((item): item is NonNullable<typeof item> => Boolean(item));
+
+        const nextStat: QuestionPerformanceStat = {
+          questionId: r.id,
+          attempts,
+          correctAttempts,
+          pValue,
+          highGroupAttempts,
+          highGroupCorrect,
+          lowGroupAttempts,
+          lowGroupCorrect,
+          discriminationIndex,
+          optionSelections: baseSelections,
+          distractorStats,
+          flags: [],
+          needsEditorialReview: false,
+          lastUpdatedAt: new Date().toISOString(),
+        };
+
+        nextStat.flags = evaluateQuestionFlags(nextStat);
+        nextStat.needsEditorialReview = nextStat.flags.length > 0;
+        nextQuestionPerformance[r.id] = nextStat;
       });
 
       let newDifficulty = prev.currentDifficulty;
@@ -384,6 +476,7 @@ export function useQuiz() {
         currentDifficulty: newDifficulty,
         materialMastery: { ...(prev.materialMastery ?? {}), ...materialMastery },
         reports: [report, ...prev.reports].slice(0, 10),
+        questionPerformance: nextQuestionPerformance,
       };
     });
 

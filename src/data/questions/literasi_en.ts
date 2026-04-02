@@ -1,6 +1,7 @@
 import { Question } from '../../types/quiz';
+import { withBlueprintMetadata } from './quality';
 
-export const LITERASI_EN_QUESTIONS: Question[] = [
+export const LITERASI_EN_QUESTIONS: Question[] = withBlueprintMetadata([
   // --- Literasi Bahasa Inggris ---
   {
     id: 'lit-en-1',
@@ -68,4 +69,4 @@ export const LITERASI_EN_QUESTIONS: Question[] = [
     explanation: 'The author uses positive and descriptive words like "majestically", "glistening", and "sweet scent", which shows an appreciative tone towards nature.',
     irtParams: { difficulty: 1.5, discrimination: 1.4, guessing: 0.2 }
   }
-];
+]);
