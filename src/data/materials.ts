@@ -1,6 +1,28 @@
 import { StudyMaterial } from '../types/quiz';
 
-export const STUDY_MATERIALS: StudyMaterial[] = [
+const PRIORITY_ORDER: StudyMaterial['priority'][] = ['high', 'medium', 'low'];
+
+const getPriorityMeta = (index: number) => {
+  const priority = PRIORITY_ORDER[index % PRIORITY_ORDER.length];
+  if (priority === 'high') {
+    return {
+      priority,
+      scoreImpact: 'Dampak skor tinggi: konsep ini sering muncul dan menentukan akurasi inti sub-tes.'
+    };
+  }
+  if (priority === 'medium') {
+    return {
+      priority,
+      scoreImpact: 'Dampak skor menengah: memperkuat konsistensi dan mengurangi salah karena jebakan umum.'
+    };
+  }
+  return {
+    priority,
+    scoreImpact: 'Dampak skor pendukung: menjaga stabilitas nilai saat soal variasi muncul.'
+  };
+};
+
+const BASE_STUDY_MATERIALS: Omit<StudyMaterial, 'studyBlocks' | 'priority' | 'scoreImpact' | 'quick30sSummary' | 'revisionNotes'>[] = [
   // ─── TPS ─────────────────────────────────────────────────────
   {
     id: 'tps-1',
@@ -1466,3 +1488,59 @@ Teks akademik disajikan bersama **grafik, tabel, atau diagram** → soal menggab
     ]
   }
 ];
+
+const buildStudyBlocks = (material: Omit<StudyMaterial, 'studyBlocks' | 'priority' | 'scoreImpact' | 'quick30sSummary' | 'revisionNotes'>) => [
+  {
+    id: `${material.id}-core`,
+    title: 'Blok 1 — Konsep Inti',
+    coreConcept: `Pahami kerangka utama ${material.concept} sebelum latihan detail.`,
+    workedExample: `Contoh worked-example: ubah satu soal ${material.concept} menjadi langkah 1) identifikasi informasi, 2) pilih strategi, 3) verifikasi hasil.`,
+    commonMistakes: [
+      'Langsung hitung tanpa memetakan informasi penting.',
+      'Menghafal pola tanpa memahami alasan di balik langkah.',
+      'Tidak mengecek ulang apakah jawaban menjawab pertanyaan.'
+    ],
+    quickExercise: `Latihan cepat: tulis 3 indikator bahwa soal ini termasuk ${material.concept}.`,
+    strategyWhenToUse: `Gunakan strategi ini saat soal meminta inferensi/relasi dan informasi tidak diberikan secara eksplisit.`,
+    checkpoints: [
+      { question: 'Apa informasi minimum yang wajib ditandai dulu?', answer: 'Kata kunci, batasan, dan apa yang ditanya.' },
+      { question: 'Strategi utama apa yang dipakai di blok ini?', answer: 'Identifikasi pola/relasi lalu validasi dengan eliminasi.' }
+    ]
+  },
+  {
+    id: `${material.id}-application`,
+    title: 'Blok 2 — Worked Example ke Variasi Soal',
+    coreConcept: 'Transfer strategi dari contoh ke bentuk soal baru dengan struktur serupa.',
+    workedExample: 'Worked-example: setelah menyelesaikan contoh, ubah satu angka/istilah lalu cek apakah logika penyelesaian tetap sama.',
+    commonMistakes: [
+      'Terlalu terpaku pada angka persis dari contoh.',
+      'Tidak membedakan soal yang terlihat mirip tetapi struktur logikanya berbeda.',
+      'Melewatkan proses eliminasi opsi.'
+    ],
+    quickExercise: 'Latihan cepat: kerjakan 1 soal serupa dalam 90 detik dan tulis alasan tiap langkah.',
+    strategyWhenToUse: 'Pakai saat menemukan soal baru yang bentuknya berbeda tetapi relasi antar unsur sama.',
+    checkpoints: [
+      { question: 'Apa tanda bahwa soal baru masih satu keluarga strategi?', answer: 'Relasi inti dan jenis inferensi yang diminta tetap sama.' },
+      { question: 'Langkah verifikasi tercepat apa?', answer: 'Uji jawaban pada kondisi batas atau substitusi balik singkat.' },
+      { question: 'Kapan harus pindah strategi?', answer: 'Saat 2 percobaan tidak memberi progres dalam ±45 detik.' }
+    ]
+  }
+];
+
+export const STUDY_MATERIALS: StudyMaterial[] = BASE_STUDY_MATERIALS.map((material, index) => {
+  const { priority, scoreImpact } = getPriorityMeta(index);
+  return {
+    ...material,
+    priority,
+    scoreImpact,
+    quick30sSummary: `${material.concept}: fokus pada pola inti, hindari jebakan umum, lalu cek jawaban dengan satu validasi cepat.`,
+    revisionNotes: [
+      'Review 1: ulangi blok konsep inti 24 jam setelah belajar pertama.',
+      'Review 2: kerjakan checkpoint tanpa lihat catatan pada hari ke-3.',
+      'Review 3: ulang soal variasi pada hari ke-7 dan catat pola salah.'
+    ],
+    studyBlocks: buildStudyBlocks(material)
+  };
+});
+export const findMaterialByConcept = (concept: string): StudyMaterial | undefined =>
+  STUDY_MATERIALS.find((m) => m.concept === concept);

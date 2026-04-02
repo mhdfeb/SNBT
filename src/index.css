@@ -1,8 +1,148 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Playfair+Display:ital,wght@1,300;1,900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@500;600;700&display=swap');
 @import "tailwindcss";
 
 @theme {
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
-  --font-serif: "Playfair Display", serif;
+  --font-display: "Space Grotesk", "Inter", ui-sans-serif, system-ui, sans-serif;
+}
+
+:root {
+  /* spacing scale */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+
+  /* radius scale */
+  --radius-sm: 0.625rem;
+  --radius-md: 0.875rem;
+  --radius-lg: 1.25rem;
+  --radius-xl: 1.75rem;
+
+  /* shadow scale */
+  --shadow-sm: 0 1px 2px rgb(15 23 42 / 0.06);
+  --shadow-md: 0 10px 24px rgb(15 23 42 / 0.08);
+  --shadow-lg: 0 20px 40px rgb(15 23 42 / 0.14);
+
+  /* semantic colors (AA friendly on white background) */
+  --color-success: #166534;
+  --color-success-soft: #dcfce7;
+  --color-warning: #92400e;
+  --color-warning-soft: #fef3c7;
+  --color-info: #1d4ed8;
+  --color-info-soft: #dbeafe;
+}
+
+@layer base {
+  body {
+    @apply bg-slate-50 text-slate-900 antialiased;
+    font-family: var(--font-sans);
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-family: var(--font-display);
+    @apply tracking-tight;
+  }
+
+  /* text hierarchy trimmed to a small, consistent scale */
+  .text-display {
+    @apply text-4xl md:text-5xl font-bold leading-tight;
+  }
+
+  .text-title {
+    @apply text-2xl font-bold leading-snug;
+  }
+
+  .text-body {
+    @apply text-base leading-relaxed text-slate-700;
+  }
+
+  .text-caption {
+    @apply text-xs font-semibold uppercase tracking-wider text-slate-500;
+  }
+}
+
+@layer components {
+  .ui-navbar {
+    @apply bg-slate-800 text-white px-6 py-4 sticky top-0 z-50;
+    box-shadow: var(--shadow-lg);
+  }
+
+  .ui-card {
+    @apply bg-white border border-slate-200;
+    border-radius: var(--radius-xl);
+    box-shadow: var(--shadow-sm);
+  }
+
+  .ui-card-hover {
+    @apply transition-all hover:border-indigo-300 hover:-translate-y-0.5;
+    box-shadow: var(--shadow-md);
+  }
+
+  .ui-btn {
+    @apply inline-flex items-center justify-center gap-2 font-semibold transition-colors duration-200;
+    border-radius: var(--radius-lg);
+    padding: var(--space-3) var(--space-6);
+  }
+
+  .ui-btn-primary {
+    @apply inline-flex items-center justify-center gap-2 font-semibold transition-colors duration-200 bg-indigo-600 text-white hover:bg-indigo-700;
+    border-radius: var(--radius-lg);
+    padding: var(--space-3) var(--space-6);
+  }
+
+  .ui-btn-secondary {
+    @apply inline-flex items-center justify-center gap-2 font-semibold transition-colors duration-200 bg-slate-100 text-slate-800 hover:bg-slate-200;
+    border-radius: var(--radius-lg);
+    padding: var(--space-3) var(--space-6);
+  }
+
+  .ui-btn-warning {
+    @apply inline-flex items-center justify-center gap-2 font-semibold transition-colors duration-200;
+    color: #111827;
+    background: #f59e0b;
+    border-radius: var(--radius-lg);
+    padding: var(--space-3) var(--space-6);
+  }
+
+  .ui-btn-warning:hover {
+    background: #d97706;
+  }
+
+  .ui-btn-success {
+    @apply inline-flex items-center justify-center gap-2 font-semibold transition-colors duration-200 bg-green-700 text-white hover:bg-green-800;
+    border-radius: var(--radius-lg);
+    padding: var(--space-3) var(--space-6);
+  }
+
+  .ui-badge {
+    @apply inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold;
+  }
+
+  .ui-badge-info {
+    @apply inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold;
+    color: var(--color-info);
+    background: color-mix(in srgb, var(--color-info-soft) 92%, white);
+    border-color: #bfdbfe;
+  }
+
+  .ui-badge-success {
+    @apply inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold;
+    color: var(--color-success);
+    background: color-mix(in srgb, var(--color-success-soft) 92%, white);
+    border-color: #bbf7d0;
+  }
+
+  .ui-badge-warning {
+    @apply inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold;
+    color: var(--color-warning);
+    background: color-mix(in srgb, var(--color-warning-soft) 92%, white);
+    border-color: #fde68a;
+  }
 }
