@@ -202,6 +202,7 @@ export interface UserProgress {
   simulationReports: AssessmentReport[];
   materialMastery: { [concept: string]: { correct: number; total: number } };
   materialMastery: { [concept: string]: number }; // 0-100 per concept
+  drillHistory?: TargetedDrillResult[];
   subTestHistory: { [subTestName: string]: SubTestHistoryEntry[] };
   questionUsage: { [questionId: string]: { shownCount: number; lastShownAt: string | null } };
   questionPerformance: { [questionId: string]: { attempts: number; wrong: number } };
@@ -399,6 +400,7 @@ export interface Prodi {
 }
 
 export interface QuizSession {
+  mode: 'tryout' | 'mini' | 'daily' | 'category' | 'targeted';
   mode: 'tryout' | 'mini' | 'daily' | 'category' | 'simulation';
   mode: 'tryout' | 'mini' | 'daily' | 'drill15' | 'category';
   selectedCategory?: Category;
@@ -420,6 +422,20 @@ export interface QuizSession {
     expiresAt: number; // absolute timestamp (ms) when this sub-test timer expires; 0 = not yet started
   }[];
   currentSubTestIdx?: number;
+  targetedMeta?: {
+    concept: Concept;
+    baselineAccuracy: number;
+  };
+}
+
+export interface TargetedDrillResult {
+  id: string;
+  date: string;
+  concept: Concept;
+  baselineAccuracy: number;
+  postAccuracy: number;
+  delta: number;
+  totalQuestions: number;
   totalTimeLimitSec?: number;
   totalExpiresAt?: number;
   questionStartAt?: number;
