@@ -154,6 +154,17 @@ export interface ConceptProfile {
   lastSeenAt: number;
 }
 
+export interface UserTarget {
+  ptnId: string;
+  prodiId: string;
+}
+
+export interface SubTestHistoryEntry {
+  date: string;
+  scores: { [key in Category]: number };
+  consistency: number; // 0-100, semakin tinggi semakin stabil
+}
+
 export interface UserProgress {
   storageVersion: number;
   completedIds: string[];
@@ -167,6 +178,8 @@ export interface UserProgress {
   reports: AssessmentReport[];
   materialMastery: { [concept: string]: { correct: number; total: number } };
   materialMastery: { [concept: string]: number }; // 0-100 per concept
+  target?: UserTarget;
+  subTestHistory: SubTestHistoryEntry[];
   conceptLastSeen: { [concept: string]: string }; // ISO datetime
   conceptHistory?: { [concept: string]: boolean[] };
   conceptReviewState?: {
@@ -254,6 +267,16 @@ export interface AssessmentReport {
     prodi: string;
     chance: number; // 0-100
   }[];
+  readinessIndex: number;
+  trendSessions: number;
+  consistency: number;
+  gapBySubTest: { [key in Category]: number };
+  focusRecommendations: string[];
+  target?: {
+    ptn: string;
+    prodi: string;
+    passingGrade: number;
+  };
   performancePrediction?: {
     scoreRange: [number, number];
     confidenceLevel: 'Low' | 'Medium' | 'High';

@@ -1,4 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { Question, UserProgress, QuizSession, Difficulty, Category, AssessmentReport, UserTarget } from '../types/quiz';
+import { QUESTIONS } from '../data/questions';
 import { Question, UserProgress, QuizSession, Difficulty, Category, AssessmentReport } from '../types/quiz';
 import { QUESTIONS, TRYOUT_BLUEPRINT } from '../data/questions';
 import { getValidQuestionsForSubtest } from '../data/questionGovernance';
@@ -21,6 +23,7 @@ const STORAGE_VERSION = 4;
 const ROLLING_ALPHA = 0.35;
 const MIN_CONCEPT_SAMPLE_FOR_STATUS = 5;
 const STORAGE_KEY = 'ppu_master_progress_v3';
+const CATEGORIES: Category[] = ['TPS', 'Literasi Indonesia', 'Literasi Inggris', 'Penalaran Matematika'];
 const RECENT_WINDOW = 6;
 const RECOMMENDED_COUNTS: Record<'daily' | 'mini' | 'drill15', number> = {
   daily: 5,
@@ -47,6 +50,7 @@ const INITIAL_PROGRESS: UserProgress = {
   currentDifficulty: 'easy',
   reports: [],
   materialMastery: {},
+  subTestHistory: [],
   conceptLastSeen: {},
   conceptHistory: {},
   conceptReviewState: {},
@@ -143,6 +147,68 @@ const SUB_TEST_CONFIGS = [
   { name: 'Literasi Bahasa Indonesia', category: 'Literasi Indonesia', count: 30, time: 2700 },
   { name: 'Literasi Bahasa Inggris', category: 'Literasi Inggris', count: 20, time: 900 },
   { name: 'Penalaran Matematika', category: 'Penalaran Matematika', count: 20, time: 1800 },
+] as const;
+
+const clamp = (num: number, min: number, max: number) => Math.min(max, Math.max(min, num));
+
+const getConsistencyScore = (scores: number[]) => {
+  if (scores.length < 2) return 100;
+  const mean = scores.reduce((a, b) => a + b, 0) / scores.length;
+  const variance = scores.reduce((acc, score) => acc + (score - mean) ** 2, 0) / scores.length;
+  const stdDev = Math.sqrt(variance);
+  return Math.round(clamp(100 - stdDev / 2.2, 0, 100));
+};
+
+const calculateReadinessInsights = (reports: AssessmentReport[], target?: UserTarget) => {
+  const lookback = clamp(reports.length, 4, 8);
+  const trendReports = reports.slice(0, lookback);
+
+  const avgTotal = trendReports.length > 0
+    ? trendReports.reduce((sum, r) => sum + r.totalScore, 0) / trendReports.length
+    : 0;
+
+  const categoryAverages = CATEGORIES.reduce((acc, category) => {
+    const avg = trendReports.length > 0
+      ? trendReports.reduce((sum, report) => sum + report.categoryScores[category], 0) / trendReports.length
+      : 0;
+    acc[category] = Math.round(avg);
+    return acc;
+  }, {} as { [key in Category]: number });
+
+  const targetPTN = PTN_DATA.find((ptn) => ptn.id === target?.ptnId);
+  const targetProdi = targetPTN?.prodi.find((prodi) => prodi.id === target?.prodiId);
+  const passingGrade = targetProdi?.passingGrade ?? 700;
+
+  const readinessIndex = Math.round(clamp((avgTotal / passingGrade) * 100, 0, 100));
+  const consistency = getConsistencyScore(trendReports.map(r => r.totalScore));
+
+  const gapBySubTest = CATEGORIES.reduce((acc, category) => {
+    acc[category] = Math.round(clamp(passingGrade - categoryAverages[category], -300, 300));
+    return acc;
+  }, {} as { [key in Category]: number });
+
+  const focusRecommendations = Object.entries(gapBySubTest)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 3)
+    .map(([subtest, gap], idx) => {
+      if (gap <= 0) return `Pertahankan ${subtest} dengan mixed drill 20 menit/hari agar skor tetap stabil.`;
+      const weeklyTarget = Math.max(15, Math.round(gap / 3));
+      return `${idx + 1}. Prioritaskan ${subtest}: kejar +${weeklyTarget} poin/minggu dengan latihan bertahap dan evaluasi 2x.`;
+    });
+
+  return {
+    readinessIndex,
+    trendSessions: trendReports.length,
+    consistency,
+    gapBySubTest,
+    focusRecommendations,
+    targetInfo: targetPTN && targetProdi
+      ? {
+          ptn: targetPTN.name,
+          prodi: targetProdi.name,
+          passingGrade: targetProdi.passingGrade,
+        }
+      : undefined,
 ].map((config) => {
   const blueprint = TRYOUT_BLUEPRINT.find((bp) => bp.subtest === config.name);
   return {
@@ -396,6 +462,7 @@ export function useQuiz() {
         ...INITIAL_PROGRESS,
         ...parsed,
         materialMastery: parsed.materialMastery ?? {},
+        subTestHistory: parsed.subTestHistory ?? [],
         itemPerformance: parsed.itemPerformance ?? {},
         questionHistory: parsed.questionHistory ?? {},
         conceptProfiles: parsed.conceptProfiles ?? {},
@@ -788,6 +855,10 @@ export function useQuiz() {
   }, [progress, buildReason, getDailyStrategy, getStrategyWeight]);
   }, [chooseAdaptiveQuestions]);
 
+  const setTarget = useCallback((target: UserTarget) => {
+    setProgress(prev => ({ ...prev, target }));
+  }, []);
+
   const toggleMark = () => {
     if (!session || session.isSubmitted) return;
     const qId = session.questions[session.currentIdx].id;
@@ -908,6 +979,8 @@ export function useQuiz() {
 
     const { rank, percentile, totalParticipants } = getNationalStats(irtScore);
 
+    const categoryScores = {} as { [key in Category]: number };
+    CATEGORIES.forEach(cat => {
     const categoryScores: any = {};
     const categories: Category[] = ['TPS', 'Literasi Indonesia', 'Literasi Inggris', 'Penalaran Matematika'];
     categories.forEach(cat => {
@@ -1285,6 +1358,38 @@ export function useQuiz() {
         else if (newDifficulty === 'medium') newDifficulty = 'easy';
       }
 
+      const baseReport: AssessmentReport = {
+        id: `report-${Date.now()}`,
+        date: new Date().toISOString(),
+        totalScore: irtScore,
+        categoryScores,
+        nationalRank: rank,
+        totalParticipants,
+        percentile,
+        materialMastery,
+        recommendations,
+        readinessIndex: 0,
+        trendSessions: 0,
+        consistency: 0,
+        gapBySubTest: {
+          'TPS': 0,
+          'Literasi Indonesia': 0,
+          'Literasi Inggris': 0,
+          'Penalaran Matematika': 0,
+        },
+        focusRecommendations: [],
+      };
+
+      const reportsWithCurrent = [baseReport, ...prev.reports].slice(0, 10);
+      const readiness = calculateReadinessInsights(reportsWithCurrent, prev.target);
+      const finalReport: AssessmentReport = {
+        ...baseReport,
+        readinessIndex: readiness.readinessIndex,
+        trendSessions: readiness.trendSessions,
+        consistency: readiness.consistency,
+        gapBySubTest: readiness.gapBySubTest,
+        focusRecommendations: readiness.focusRecommendations,
+        target: readiness.targetInfo,
       const currentStrategy = session.strategy;
       const previousOutcome = currentStrategy ? prev.strategyOutcomes?.[currentStrategy] : undefined;
       const strategyCorrect = correctCount;
@@ -1394,6 +1499,15 @@ export function useQuiz() {
         materialMastery: aggregateMastery,
         reports: [mergedReport, ...prev.reports].slice(0, 10),
         materialMastery: { ...(prev.materialMastery ?? {}), ...materialMastery },
+        subTestHistory: [
+          {
+            date: finalReport.date,
+            scores: finalReport.categoryScores,
+            consistency: finalReport.consistency,
+          },
+          ...prev.subTestHistory,
+        ].slice(0, 20),
+        reports: [finalReport, ...prev.reports].slice(0, 10),
         conceptLastSeen: {
           ...(prev.conceptLastSeen ?? {}),
           ...Object.fromEntries(results.map(r => [r.concept, new Date().toISOString()])),
@@ -1483,6 +1597,7 @@ export function useQuiz() {
     nextSubTest,
     toggleMark,
     setSession,
+    setTarget,
     updateConceptMasteryFromCheckpoint,
     markMaterialRead,
   };
