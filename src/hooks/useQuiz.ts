@@ -3,7 +3,7 @@ import { QUESTIONS } from '../data/questions';
 import type { AssessmentReport, Category, Concept, QuizSession, TargetedDrillResult, UserProgress, UserTarget } from '../types/quiz';
 import { calculateSessionReport } from './quiz/analyticsScoring';
 import { loadProgressFromStorage, STORAGE_KEY } from './quiz/progressMigration';
-import { pickQuestionsByMode } from './quiz/questionSelection';
+import { buildSubTestConfig, pickQuestionsByMode } from './quiz/questionSelection';
 
 const clamp = (value: number, min: number, max: number): number => Math.min(max, Math.max(min, value));
 
@@ -24,12 +24,36 @@ export function useQuiz() {
     ) => {
       const selectedQuestions = pickQuestionsByMode(QUESTIONS, progress, mode, category, options?.concept);
       const now = Date.now();
+      const subTestConfig = buildSubTestConfig(mode);
+      const shouldUseSubTests = subTestConfig.length > 0;
+      const builtSubTests = shouldUseSubTests
+        ? (() => {
+            let cursor = 0;
+            return subTestConfig
+              .map((subTest) => {
+                const endExclusive = Math.min(cursor + subTest.questionCount, selectedQuestions.length);
+                const questionIndices = Array.from({ length: Math.max(0, endExclusive - cursor) }, (_, idx) => cursor + idx);
+                cursor = endExclusive;
+
+                return {
+                  name: subTest.name,
+                  questionIndices,
+                  timeLimit: subTest.timeLimitSec,
+                  expiresAt: now + subTest.timeLimitSec * 1000,
+                };
+              })
+              .filter((subTest) => subTest.questionIndices.length > 0);
+          })()
+        : undefined;
+
+      const totalTimeLimitSec = builtSubTests?.reduce((total, subTest) => total + subTest.timeLimit, 0);
+      const firstSubTestQuestion = builtSubTests?.[0]?.questionIndices?.[0] ?? 0;
 
       setSession({
         mode,
         selectedCategory: category,
         questions: selectedQuestions,
-        currentIdx: 0,
+        currentIdx: firstSubTestQuestion,
         answers: {},
         marked: {},
         answerTimeline: {},
@@ -37,6 +61,10 @@ export function useQuiz() {
         timePerQuestion: {},
         questionStartedAt: now,
         isSubmitted: false,
+        subTests: builtSubTests,
+        currentSubTestIdx: builtSubTests?.length ? 0 : undefined,
+        totalTimeLimitSec,
+        totalExpiresAt: totalTimeLimitSec ? now + totalTimeLimitSec * 1000 : undefined,
         targetedMeta: options?.concept
           ? {
               concept: options.concept,
@@ -68,7 +96,10 @@ export function useQuiz() {
   const nextQuestion = useCallback(() => {
     setSession((prev) => {
       if (!prev) return prev;
-      if (prev.currentIdx >= prev.questions.length - 1) return prev;
+      const activeSubTest = prev.subTests?.[prev.currentSubTestIdx ?? 0];
+      const maxIndexInSubTest = activeSubTest?.questionIndices?.[activeSubTest.questionIndices.length - 1];
+      const maxAllowedIdx = maxIndexInSubTest ?? prev.questions.length - 1;
+      if (prev.currentIdx >= maxAllowedIdx) return prev;
       return { ...prev, currentIdx: prev.currentIdx + 1, questionStartedAt: Date.now() };
     });
   }, []);
@@ -76,7 +107,9 @@ export function useQuiz() {
   const prevQuestion = useCallback(() => {
     setSession((prev) => {
       if (!prev) return prev;
-      if (prev.currentIdx <= 0) return prev;
+      const activeSubTest = prev.subTests?.[prev.currentSubTestIdx ?? 0];
+      const minAllowedIdx = activeSubTest?.questionIndices?.[0] ?? 0;
+      if (prev.currentIdx <= minAllowedIdx) return prev;
       return { ...prev, currentIdx: prev.currentIdx - 1, questionStartedAt: Date.now() };
     });
   }, []);
