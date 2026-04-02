@@ -1,6 +1,7 @@
 import { Question } from '../../types/quiz';
+import { withBlueprintMetadata } from './quality';
 
-export const LITERASI_ID_QUESTIONS: Question[] = [
+export const LITERASI_ID_QUESTIONS: Question[] = withBlueprintMetadata([
   // --- Literasi Bahasa Indonesia ---
   {
     id: 'lit-id-1',
@@ -86,4 +87,4 @@ export const LITERASI_ID_QUESTIONS: Question[] = [
     explanation: 'Teks prosedur menggunakan kalimat imperatif (perintah) untuk memberikan instruksi.',
     irtParams: { difficulty: 1.2, discrimination: 1.3, guessing: 0.2 }
   }
-];
+]);

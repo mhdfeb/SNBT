@@ -1,6 +1,7 @@
 import { Question } from '../../types/quiz';
+import { withBlueprintMetadata } from './quality';
 
-export const TPS_QUESTIONS: Question[] = [
+export const TPS_QUESTIONS: Question[] = withBlueprintMetadata([
   // --- TPS: Penalaran Induktif ---
   {
     id: 'pi-1',
@@ -482,4 +483,4 @@ export const TPS_QUESTIONS: Question[] = [
     explanation: 'Rumus jumlah akar: -b/a = -(-4)/1 = 4.',
     irtParams: { difficulty: 1.1, discrimination: 1.5, guessing: 0.2 }
   }
-];
+]);
