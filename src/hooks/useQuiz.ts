@@ -176,10 +176,15 @@ export function useQuiz() {
         const answer = normalizeAnswerByQuestion(q.type, session.answers[q.id] ?? null);
         const isCorrect =
           q.type === 'multiple_choice'
-            ? answer === q.correctAnswer
+            ? typeof answer === 'number' && answer === q.correctAnswer
             : q.type === 'short_answer'
-              ? isFiniteNumberAnswer(answer) && answer === Number(q.shortAnswerCorrect)
-              : false;
+              ? typeof answer === 'number' && Number(answer) === Number(q.shortAnswerCorrect)
+              : q.type === 'complex_multiple_choice'
+                ? Array.isArray(answer) &&
+                  Array.isArray(q.complexOptions) &&
+                  q.complexOptions.length > 0 &&
+                  q.complexOptions.every((option, index) => answer[index] === option.correct)
+                : false;
         return { questionId: q.id, isCorrect };
       });
       const wrongIds = perQuestionResult.filter((item) => !item.isCorrect).map((item) => item.questionId);

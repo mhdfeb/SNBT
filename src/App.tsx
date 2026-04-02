@@ -12,118 +12,18 @@ import {
 } from 'lucide-react';
 import { useQuiz } from './hooks/useQuiz';
 import { QUESTIONS } from './data/questions';
-import { PTN_DATA } from './data/ptn';
-import { STUDY_MATERIALS } from './data/materials';
-import { PREDICTIONS_2026 } from './data/predictions2026';
-import type { Concept, Prodi, PTN, Question, QuestionAnswer } from './types/quiz';
+import { QuestionRenderer } from './components/quiz/QuestionRenderer';
+import type { Concept, QuizSession } from './types/quiz';
 
-const parseShortAnswer = (value: string): QuestionAnswer => {
-  if (value.trim() === '') return null;
-  const parsedValue = Number(value);
-  return Number.isFinite(parsedValue) ? parsedValue : null;
-};
-
-const parseShortAnswer = (value: string): QuestionAnswer => {
-  if (value.trim() === '') return null;
-  const parsedValue = Number(value);
-  return Number.isFinite(parsedValue) ? parsedValue : null;
-};
-
-function QuestionCard({
-  question,
-  answer,
-  onAnswer,
-  submitted,
-}: {
-  question: Question;
-  answer: QuestionAnswer;
-  onAnswer: (value: QuestionAnswer) => void;
-  submitted: boolean;
-}) {
-  if (question.type === 'complex_multiple_choice') {
-    const complexOptions = question.complexOptions ?? [];
-
-    if (complexOptions.length === 0) {
-      return (
-        <div className="space-y-3">
-          <p className="font-semibold text-slate-700">{question.question}</p>
-          <p className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800">
-            Konten soal tidak valid: pernyataan untuk tipe complex multiple choice belum tersedia.
-          </p>
-        </div>
-      );
-    }
-
-    const selectedAnswers = Array.isArray(answer) ? answer : [];
-
-    return (
-      <div className="space-y-3">
-        <p className="font-semibold text-slate-700">{question.question}</p>
-        <div className="space-y-2">
-          {complexOptions.map((option, idx) => (
-            <label
-              key={`${question.id}-${idx}`}
-              className="flex cursor-pointer items-start gap-3 rounded-lg border border-slate-200 p-3"
-            >
-              <input
-                type="checkbox"
-                checked={Boolean(selectedAnswers[idx])}
-                disabled={submitted}
-                onChange={(e) => {
-                  const nextAnswers = complexOptions.map((_, optionIdx) =>
-                    optionIdx === idx ? e.target.checked : Boolean(selectedAnswers[optionIdx]),
-                  );
-                  onAnswer(nextAnswers);
-                }}
-              />
-              <span className="text-slate-700">{option.statement}</span>
-            </label>
-          ))}
-        </div>
-      </div>
-    );
-  }
-
-  if (question.type === 'short_answer') {
-    return (
-      <div className="space-y-3">
-        <p className="font-semibold text-slate-700">{question.question}</p>
-        <input
-          type="number"
-          className="w-full rounded-lg border border-slate-300 p-3"
-          value={typeof answer === 'number' ? answer : ''}
-          disabled={submitted}
-          onChange={(e) => onAnswer(parseShortAnswer(e.target.value))}
-          placeholder="Masukkan jawaban"
-        />
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-3">
-      <p className="font-semibold text-slate-700">{question.question}</p>
-      <div className="space-y-2">
-        {question.options?.map((option, idx) => {
-          const selected = answer === idx;
-          return (
-            <button
-              key={`${question.id}-${idx}`}
-              type="button"
-              disabled={submitted}
-              onClick={() => onAnswer(idx)}
-              className={`w-full rounded-lg border p-3 text-left transition ${
-                selected ? 'border-indigo-500 bg-indigo-50' : 'border-slate-200 hover:border-slate-300'
-              }`}
-            >
-              {String.fromCharCode(65 + idx)}. {option}
-            </button>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
+const SESSION_MODES: { mode: QuizSession['mode']; label: string }[] = [
+  { mode: 'mini', label: 'Mini Quiz' },
+  { mode: 'daily', label: 'Daily 5' },
+  { mode: 'drill15', label: 'Drill 15' },
+  { mode: 'tryout', label: 'Tryout' },
+  { mode: 'simulation', label: 'Simulation' },
+  { mode: 'category', label: 'Category Focus' },
+  { mode: 'targeted', label: 'Targeted Concept' },
+];
 
 type AppView = 'home' | 'quiz' | 'result' | 'dashboard' | 'materials' | 'target';
 
@@ -150,46 +50,26 @@ export default function App() {
     return session.questions[session.currentIdx] ?? null;
   }, [session]);
 
-  const latestReport = progress.reports?.[0] ?? null;
-
-  const weakConcepts = useMemo(
-    () =>
-      (latestReport?.conceptEvaluations ?? [])
-        .filter((item) => item.status === 'Critical' || item.status === 'Watchlist')
-        .map((item) => item.concept),
-    [latestReport],
+  const firstCategory = useMemo(() => QUESTIONS[0]?.category, []);
+  const availableConcepts = useMemo(
+    () => Array.from(new Set(QUESTIONS.map((question) => question.concept).filter(Boolean))) as Concept[],
+    [],
   );
+  const weakestConcept = useMemo(() => {
+    if (availableConcepts.length === 0) return undefined;
 
-  const strongConcepts = useMemo(
-    () => (latestReport?.conceptEvaluations ?? []).filter((item) => item.status === 'Strong').map((item) => item.concept),
-    [latestReport],
-  );
+    const mastered = progress.materialMastery ?? {};
+    return [...availableConcepts].sort((a, b) => (mastered[a] ?? 0) - (mastered[b] ?? 0))[0];
+  }, [availableConcepts, progress.materialMastery]);
 
-  const recommendedMaterials = useMemo(() => {
-    const weakSet = new Set(weakConcepts);
-    const targeted = STUDY_MATERIALS.filter((material) => weakSet.has(material.concept));
-    return targeted.length > 0 ? targeted.slice(0, 4) : STUDY_MATERIALS.slice(0, 4);
-  }, [weakConcepts]);
-
-  const weeklyInsight = useMemo(() => {
-    const weakSet = new Set(weakConcepts);
-    const targeted = PREDICTIONS_2026.filter((prediction) => weakSet.has(prediction.concept));
-    return targeted.length > 0 ? targeted.slice(0, 2) : PREDICTIONS_2026.slice(0, 2);
-  }, [weakConcepts]);
-
-  const selectedPtn: PTN | undefined = useMemo(
-    () => PTN_DATA.find((ptn) => ptn.id === selectedPtnId) ?? PTN_DATA[0],
-    [selectedPtnId],
-  );
-  const selectedProdi: Prodi | undefined = useMemo(() => {
-    if (!selectedPtn) return undefined;
-    return selectedPtn.prodi.find((prodi) => prodi.id === selectedProdiId) ?? selectedPtn.prodi[0];
-  }, [selectedProdiId, selectedPtn]);
-
-  const scoreGap = selectedProdi && latestReport ? selectedProdi.passingGrade - latestReport.totalScore : null;
-
-  const startQuickQuiz = () => {
-    startSession('mini');
+  const startModeSession = (mode: QuizSession['mode']) => {
+    if (mode === 'category' && firstCategory) {
+      startSession(mode, firstCategory);
+    } else if (mode === 'targeted') {
+      startSession(mode, undefined, { concept: weakestConcept ?? availableConcepts[0] });
+    } else {
+      startSession(mode);
+    }
     setView('quiz');
   };
 
@@ -249,36 +129,17 @@ export default function App() {
         <p className="text-slate-600">
           Bank soal aktif: <span className="font-semibold">{QUESTIONS.length}</span> soal.
         </p>
-
-        <div className="grid gap-3 sm:grid-cols-2">
-          <button
-            type="button"
-            onClick={startQuickQuiz}
-            className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-5 py-3 font-semibold text-white hover:bg-indigo-700"
-          >
-            <Target size={18} /> Mulai Quiz Cepat
-          </button>
-          <button
-            type="button"
-            onClick={() => setView('dashboard')}
-            className="inline-flex items-center gap-2 rounded-xl border border-slate-300 px-5 py-3 font-semibold text-slate-700 hover:bg-slate-50"
-          >
-            <BarChart3 size={18} /> Dashboard Progres
-          </button>
-          <button
-            type="button"
-            onClick={() => setView('materials')}
-            className="inline-flex items-center gap-2 rounded-xl border border-slate-300 px-5 py-3 font-semibold text-slate-700 hover:bg-slate-50"
-          >
-            <BookOpen size={18} /> Materi Belajar
-          </button>
-          <button
-            type="button"
-            onClick={() => setView('target')}
-            className="inline-flex items-center gap-2 rounded-xl border border-slate-300 px-5 py-3 font-semibold text-slate-700 hover:bg-slate-50"
-          >
-            <TrendingUp size={18} /> Target PTN
-          </button>
+        <div className="flex flex-wrap gap-3">
+          {SESSION_MODES.map((item) => (
+            <button
+              key={item.mode}
+              type="button"
+              onClick={() => startModeSession(item.mode)}
+              className="inline-flex w-fit items-center gap-2 rounded-xl bg-indigo-600 px-5 py-3 font-semibold text-white hover:bg-indigo-700"
+            >
+              <Target size={18} /> {item.label}
+            </button>
+          ))}
         </div>
       </main>
     );
@@ -513,7 +374,7 @@ export default function App() {
     <main className="mx-auto flex min-h-screen max-w-3xl flex-col gap-6 px-6 py-10">
       <header className="flex items-center justify-between">
         <h2 className="inline-flex items-center gap-2 text-xl font-bold text-slate-900">
-          <BookOpen size={20} /> Mode Quiz
+          <BookOpen size={20} /> Mode Quiz ({session?.mode ?? '-'})
         </h2>
         <div className="text-right">
           <span className="block text-sm text-slate-500">
@@ -529,7 +390,7 @@ export default function App() {
 
       {session && currentQuestion ? (
         <>
-          <QuestionCard
+          <QuestionRenderer
             question={currentQuestion}
             answer={session.answers[currentQuestion.id]}
             onAnswer={answerQuestion}
