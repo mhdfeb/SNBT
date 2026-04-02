@@ -26,8 +26,9 @@ import {
 } from 'lucide-react';
 import { useQuiz } from './hooks/useQuiz';
 import { formatTime, cn } from './lib/utils';
-import { Difficulty, Category, Question, AssessmentReport, StudyMaterial, QuizSession } from './types/quiz';
+import { Difficulty, Category, Question, AssessmentReport, StudyMaterial, QuizSession, Concept } from './types/quiz';
 import { STUDY_MATERIALS } from './data/materials';
+import { QUESTIONS } from './data/questions';
 import ReactMarkdown from 'react-markdown';
 import { 
   BarChart, 
@@ -283,7 +284,8 @@ export default function App() {
     submitQuiz,
     nextSubTest,
     toggleMark,
-    setSession
+    setSession,
+    lastDrillResult
   } = useQuiz();
 
   const [view, setView] = useState<'dashboard' | 'quiz' | 'analytics' | 'report' | 'study'>('dashboard');
@@ -300,12 +302,13 @@ export default function App() {
       case 'daily': return 'Latihan Harian';
       case 'tryout': return 'Tryout Full';
       case 'category': return 'Latihan Kategori';
+      case 'targeted': return 'Mini-Drill Terarah';
       default: return mode;
     }
   };
 
-  const handleStart = (mode: 'tryout' | 'mini' | 'daily' | 'category', category?: Category) => {
-    startSession(mode, category);
+  const handleStart = (mode: 'tryout' | 'mini' | 'daily' | 'category' | 'targeted', category?: Category, concept?: Concept) => {
+    startSession(mode, category, concept);
     setView('quiz');
   };
 
@@ -623,7 +626,11 @@ export default function App() {
                     onClick={() => {
                       submitQuiz();
                       setShowSubmitConfirm(false);
-                      setView('report');
+                      if (session.mode === 'targeted') {
+                        setView('analytics');
+                      } else {
+                        setView('report');
+                      }
                       window.scrollTo(0, 0);
                     }}
                     className="flex-1 py-4 rounded-2xl font-bold text-white bg-green-600 hover:bg-green-600 transition-colors shadow-lg shadow-green-100"
@@ -932,6 +939,32 @@ export default function App() {
       fullMark: 100
     }));
 
+    const wrongByConcept = progress.wrongIds.reduce((acc, questionId) => {
+      const question = QUESTIONS.find(q => q.id === questionId);
+      if (!question) return acc;
+      acc[question.concept] = (acc[question.concept] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+
+    const weakSessionByConcept = progress.reports.reduce((acc, report) => {
+      Object.entries(report.materialMastery).forEach(([concept, mastery]) => {
+        if (mastery < 70) {
+          acc[concept] = (acc[concept] || 0) + 1;
+        }
+      });
+      return acc;
+    }, {} as Record<string, number>);
+
+    const targetedConcepts = Object.entries(wrongByConcept)
+      .map(([concept, wrongCount]) => ({
+        concept,
+        wrongCount,
+        repeatedSessions: weakSessionByConcept[concept] || 0,
+      }))
+      .sort((a, b) => (b.repeatedSessions * 2 + b.wrongCount) - (a.repeatedSessions * 2 + a.wrongCount));
+
+    const topTargetConcept = targetedConcepts[0];
+
     return (
       <div className="max-w-6xl mx-auto p-6 space-y-10 pb-32">
         <header className="flex items-center justify-between">
@@ -1004,6 +1037,53 @@ export default function App() {
                   </RadarChart>
                 </ResponsiveContainer>
               </div>
+            </div>
+
+            <div className="bg-white p-8 rounded-[40px] border border-slate-200 shadow-sm space-y-6">
+              <h3 className="font-black text-slate-800 flex items-center gap-3">
+                <div className="bg-rose-50 p-2 rounded-xl">
+                  <AlertTriangle size={20} className="text-rose-600" />
+                </div>
+                Paket Latihan Terarah per Konsep
+              </h3>
+              {targetedConcepts.length > 0 ? (
+                <div className="space-y-4">
+                  {targetedConcepts.slice(0, 5).map(item => (
+                    <div key={item.concept} className="p-5 rounded-2xl border border-slate-200 bg-slate-50">
+                      <div className="flex items-center justify-between gap-4">
+                        <p className="font-black text-slate-900">{item.concept}</p>
+                        <p className="text-xs font-black text-slate-500 uppercase tracking-wider">
+                          Salah tersimpan: {item.wrongCount}
+                        </p>
+                      </div>
+                      <p className="text-sm text-slate-500 mt-2">
+                        Terdeteksi lemah di <span className="font-black">{item.repeatedSessions}</span> sesi (mastery &lt; 70).
+                      </p>
+                    </div>
+                  ))}
+                  {topTargetConcept && (
+                    <button
+                      onClick={() => handleStart('targeted', undefined, topTargetConcept.concept as Concept)}
+                      className="w-full bg-indigo-600 text-white py-4 rounded-2xl font-black hover:bg-indigo-700 transition-colors uppercase tracking-widest text-xs"
+                    >
+                      Generate Mini-Drill 10–15 Soal ({topTargetConcept.concept})
+                    </button>
+                  )}
+                  {lastDrillResult && (
+                    <div className="p-5 rounded-2xl border border-emerald-200 bg-emerald-50 space-y-2">
+                      <p className="text-xs font-black uppercase tracking-widest text-emerald-700">Validasi Progres (Delta)</p>
+                      <p className="font-black text-slate-900">
+                        {lastDrillResult.concept}: {lastDrillResult.baselineAccuracy}% → {lastDrillResult.postAccuracy}%
+                      </p>
+                      <p className={cn("text-sm font-bold", lastDrillResult.delta >= 0 ? "text-emerald-700" : "text-rose-700")}>
+                        Delta: {lastDrillResult.delta >= 0 ? '+' : ''}{lastDrillResult.delta}% dari {lastDrillResult.totalQuestions} soal mini-drill.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <p className="text-slate-500 text-sm">Belum ada data jawaban salah untuk digenerate jadi latihan terarah.</p>
+              )}
             </div>
           </div>
 

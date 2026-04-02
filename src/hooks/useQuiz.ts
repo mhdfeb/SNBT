@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Question, UserProgress, QuizSession, Difficulty, Category, AssessmentReport } from '../types/quiz';
+import { Question, UserProgress, QuizSession, Difficulty, Category, AssessmentReport, Concept, TargetedDrillResult } from '../types/quiz';
 import { QUESTIONS } from '../data/questions';
 import { calculateIRTScore, getNationalStats } from '../lib/irt';
 import { PTN_DATA } from '../data/ptn';
@@ -20,6 +20,7 @@ const INITIAL_PROGRESS: UserProgress = {
   currentDifficulty: 'easy',
   reports: [],
   materialMastery: {},
+  drillHistory: [],
 };
 
 const SUB_TEST_CONFIGS = [
@@ -39,7 +40,7 @@ export function useQuiz() {
     const saved = localStorage.getItem(STORAGE_KEY);
     if (saved) {
       const parsed = JSON.parse(saved);
-      return { ...INITIAL_PROGRESS, ...parsed, materialMastery: parsed.materialMastery ?? {} };
+      return { ...INITIAL_PROGRESS, ...parsed, materialMastery: parsed.materialMastery ?? {}, drillHistory: parsed.drillHistory ?? [] };
     }
     return INITIAL_PROGRESS;
   });
@@ -90,9 +91,12 @@ export function useQuiz() {
     };
   }, [session?.mode, session?.isSubmitted, session?.currentSubTestIdx]);
 
-  const startSession = useCallback((mode: QuizSession['mode'], category?: Category) => {
+  const [lastDrillResult, setLastDrillResult] = useState<TargetedDrillResult | null>(null);
+
+  const startSession = useCallback((mode: QuizSession['mode'], category?: Category, targetedConcept?: Concept) => {
     let selectedQuestions: Question[] = [];
     let subTests: QuizSession['subTests'] = [];
+    let targetedMeta: QuizSession['targetedMeta'];
 
     if (mode === 'tryout') {
       // Full Tryout: All sub-tests
@@ -142,6 +146,22 @@ export function useQuiz() {
           currentIdxOffset += shuffled.length;
         }
       });
+    } else if (mode === 'targeted' && targetedConcept) {
+      const conceptPool = QUESTIONS.filter(q => q.concept === targetedConcept);
+      const fallbackPool = QUESTIONS.filter(q => q.category === (conceptPool[0]?.category ?? 'TPS'));
+      const mixedPool = [...conceptPool, ...fallbackPool.filter(q => q.concept !== targetedConcept)];
+      selectedQuestions = mixedPool.sort(() => Math.random() - 0.5).slice(0, Math.min(12, mixedPool.length));
+      if (selectedQuestions.length < 10) {
+        const additional = QUESTIONS.filter(q => !selectedQuestions.some(sq => sq.id === q.id))
+          .sort(() => Math.random() - 0.5)
+          .slice(0, 10 - selectedQuestions.length);
+        selectedQuestions = [...selectedQuestions, ...additional];
+      }
+      const baselineMastery = progress.materialMastery[targetedConcept] ?? 0;
+      targetedMeta = {
+        concept: targetedConcept,
+        baselineAccuracy: baselineMastery,
+      };
     } else {
       const pool = category 
         ? QUESTIONS.filter(q => q.category === category)
@@ -182,7 +202,11 @@ export function useQuiz() {
       isSubmitted: false,
       subTests: mode === 'tryout' ? finalSubTests : undefined,
       currentSubTestIdx: mode === 'tryout' ? 0 : undefined,
+      targetedMeta,
     });
+    if (mode === 'targeted') {
+      setLastDrillResult(null);
+    }
   }, [progress]);
 
   const toggleMark = () => {
@@ -344,6 +368,24 @@ export function useQuiz() {
       recommendations
     };
 
+    let generatedDrillResult: TargetedDrillResult | null = null;
+    if (session.mode === 'targeted' && session.targetedMeta) {
+      const conceptResults = results.filter(r => r.concept === session.targetedMeta!.concept);
+      const postAccuracy = conceptResults.length > 0
+        ? Math.round((conceptResults.filter(r => r.correct).length / conceptResults.length) * 100)
+        : 0;
+      generatedDrillResult = {
+        id: `drill-${Date.now()}`,
+        date: new Date().toISOString(),
+        concept: session.targetedMeta.concept,
+        baselineAccuracy: session.targetedMeta.baselineAccuracy,
+        postAccuracy,
+        delta: postAccuracy - session.targetedMeta.baselineAccuracy,
+        totalQuestions: session.questions.length,
+      };
+      setLastDrillResult(generatedDrillResult);
+    }
+
     setProgress(prev => {
       const newWrongIds = [...prev.wrongIds];
       const newCompletedIds = [...prev.completedIds];
@@ -384,6 +426,9 @@ export function useQuiz() {
         currentDifficulty: newDifficulty,
         materialMastery: { ...(prev.materialMastery ?? {}), ...materialMastery },
         reports: [report, ...prev.reports].slice(0, 10),
+        drillHistory: generatedDrillResult
+          ? [generatedDrillResult, ...(prev.drillHistory ?? [])].slice(0, 20)
+          : (prev.drillHistory ?? []),
       };
     });
 
@@ -425,5 +470,6 @@ export function useQuiz() {
     nextSubTest,
     toggleMark,
     setSession,
+    lastDrillResult,
   };
 }

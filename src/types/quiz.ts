@@ -52,6 +52,7 @@ export interface UserProgress {
   currentDifficulty: Difficulty;
   reports: AssessmentReport[];
   materialMastery: { [concept: string]: number }; // 0-100 per concept
+  drillHistory?: TargetedDrillResult[];
 }
 
 export interface AssessmentReport {
@@ -87,7 +88,7 @@ export interface Prodi {
 }
 
 export interface QuizSession {
-  mode: 'tryout' | 'mini' | 'daily' | 'category';
+  mode: 'tryout' | 'mini' | 'daily' | 'category' | 'targeted';
   selectedCategory?: Category;
   questions: Question[];
   currentIdx: number;
@@ -103,4 +104,18 @@ export interface QuizSession {
     expiresAt: number; // absolute timestamp (ms) when this sub-test timer expires; 0 = not yet started
   }[];
   currentSubTestIdx?: number;
+  targetedMeta?: {
+    concept: Concept;
+    baselineAccuracy: number;
+  };
+}
+
+export interface TargetedDrillResult {
+  id: string;
+  date: string;
+  concept: Concept;
+  baselineAccuracy: number;
+  postAccuracy: number;
+  delta: number;
+  totalQuestions: number;
 }
