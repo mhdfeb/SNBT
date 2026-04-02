@@ -41,6 +41,18 @@ export interface StudyMaterial {
   fullContent: string;
   summary: string;
   sources: { name: string; url: string }[];
+  learningBlocks: {
+    id: string;
+    type: 'core_concept' | 'worked_example' | 'common_trap' | 'quick_drill';
+    title: string;
+    content: string;
+    checkpoints: {
+      id: string;
+      prompt: string;
+      focus: string;
+    }[];
+    quickRevision?: string;
+  }[];
 }
 
 export interface UserProgress {
