@@ -731,6 +731,11 @@ export function useQuiz() {
       isSubmitted: false,
       subTests: mode === 'tryout' || isStrictSimulation ? finalSubTests : undefined,
       currentSubTestIdx: mode === 'tryout' || isStrictSimulation ? 0 : undefined,
+      startTime: Date.now(),
+      timePerQuestion: {},
+      isSubmitted: false,
+      subTests: mode === 'tryout' || isStrictSimulation ? finalSubTests : undefined,
+      currentSubTestIdx: mode === 'tryout' || isStrictSimulation ? 0 : undefined,
       recommendations,
       strategy,
       startTime: Date.now(),
@@ -999,6 +1004,54 @@ export function useQuiz() {
         .sort((a, b) => a.accuracy - b.accuracy)
         .slice(0, 3)
     };
+
+    const answerEdits = Object.values(session.answerTimeline ?? {}).map((events) => Math.max(0, events.length - 1));
+    const highEditQuestions = answerEdits.filter(v => v >= 2).length;
+    const avgTimePerAnswered = durationSecs / Math.max(1, Object.keys(session.answers).length);
+    const flags: string[] = [];
+    if (avgTimePerAnswered < 20) flags.push('Waktu jawab rata-rata terlalu cepat');
+    if (highEditQuestions >= Math.max(2, Math.round(session.questions.length * 0.15))) flags.push('Terlalu banyak ganti jawaban pada soal yang sama');
+    if (Object.keys(session.marked).length > Math.round(session.questions.length * 0.35)) flags.push('Proporsi soal ragu-ragu tinggi');
+
+    const instabilityLevel: AssessmentReport['stabilityAnalysis'] = {
+      level: flags.length >= 2 ? 'Tidak Stabil' : flags.length === 1 ? 'Perlu Monitoring' : 'Stabil',
+      flags,
+    };
+
+    const confidenceLevel: AssessmentReport['performancePrediction']['confidenceLevel'] =
+      instabilityLevel.level === 'Stabil' ? 'High' : instabilityLevel.level === 'Perlu Monitoring' ? 'Medium' : 'Low';
+    const confidenceDelta = confidenceLevel === 'High' ? 40 : confidenceLevel === 'Medium' ? 80 : 130;
+    const predictedRange: [number, number] = [
+      Math.max(0, Math.round(irtScore - confidenceDelta)),
+      Math.min(1000, Math.round(irtScore + confidenceDelta)),
+    ];
+
+    const weaknessPriorities = Object.entries(materialMastery)
+      .map(([domain, accuracy]) => {
+        const priority: 'Kritis' | 'Tinggi' | 'Sedang' =
+          accuracy < 45 ? 'Kritis' : accuracy < 65 ? 'Tinggi' : 'Sedang';
+        return {
+          domain,
+          accuracy,
+          priority,
+          recommendation:
+            priority === 'Kritis'
+              ? 'Ulang konsep inti + drilling bertahap 20 soal.'
+              : priority === 'Tinggi'
+                ? 'Perbanyak latihan campuran dengan pembahasan detail.'
+                : 'Pertahankan dengan review mingguan.',
+        };
+      })
+      .sort((a, b) => a.accuracy - b.accuracy)
+      .slice(0, 5);
+
+    report.performancePrediction = {
+      scoreRange: predictedRange,
+      confidenceLevel,
+      summary: `Prediksi performa berada di rentang ${predictedRange[0]}–${predictedRange[1]} (confidence ${confidenceLevel}).`,
+    };
+    report.stabilityAnalysis = instabilityLevel;
+    report.weaknessPriorities = weaknessPriorities;
 
     const answerEdits = Object.values(session.answerTimeline ?? {}).map((events) => Math.max(0, events.length - 1));
     const highEditQuestions = answerEdits.filter(v => v >= 2).length;
