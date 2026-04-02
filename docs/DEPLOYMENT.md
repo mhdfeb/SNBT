@@ -47,3 +47,11 @@ Lakukan smoke test setelah status domain menunjukkan **Valid Configuration**:
 - Submit report dan pastikan data berhasil diproses.
 - Refresh browser, pastikan progress tetap ada (persist via `localStorage`).
 - Uji deep link route SPA (akses langsung URL non-root), pastikan tetap load normal.
+
+## 7) SOP redeploy cepat (cek commit + clear build cache)
+Gunakan checklist ini saat ingin memastikan deployment aktif benar-benar memakai commit terbaru:
+
+1. Buka **Vercel → Project → Deployments**.
+2. Cek deployment yang aktif (`Production`) lalu cocokkan **commit hash**-nya dengan commit terbaru di GitHub (branch produksi).
+3. Dari deployment/commit terbaru, klik **Redeploy** lalu **matikan opsi build cache** (clear cache / without build cache).
+4. Setelah selesai build, buka **Build Logs** dan pastikan tidak ada error **TypeScript** atau **syntax** sebelum verifikasi di domain produksi.
