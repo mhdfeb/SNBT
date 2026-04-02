@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Question, UserProgress, QuizSession, Difficulty, Category, AssessmentReport } from '../types/quiz';
-import { QUESTIONS } from '../data/questions';
+import { QUESTIONS, SIMULATION_QUESTION_BANK, TRAINING_QUESTION_BANK } from '../data/questions';
 import { calculateIRTScore, getNationalStats } from '../lib/irt';
 import { PTN_DATA } from '../data/ptn';
 
@@ -93,15 +93,17 @@ export function useQuiz() {
   const startSession = useCallback((mode: QuizSession['mode'], category?: Category) => {
     let selectedQuestions: Question[] = [];
     let subTests: QuizSession['subTests'] = [];
+    const isStrictSimulation = mode === 'simulation';
+    const sourceBank = isStrictSimulation ? SIMULATION_QUESTION_BANK : QUESTIONS;
 
-    if (mode === 'tryout') {
+    if (mode === 'tryout' || isStrictSimulation) {
       // Full Tryout: All sub-tests
       let currentIdxOffset = 0;
       const usedIds = new Set<string>();
 
       SUB_TEST_CONFIGS.forEach(config => {
         // Filter questions by concept or category, excluding already used ones
-        const subPool = QUESTIONS.filter(q => 
+        const subPool = sourceBank.filter(q => 
           !usedIds.has(q.id) && 
           (q.concept === config.name || (q.category === config.category && q.concept.includes(config.name)))
         );
@@ -109,22 +111,22 @@ export function useQuiz() {
         // If pool is too small, fallback to category pool (excluding used)
         let finalPool = subPool;
         if (finalPool.length < config.count) {
-          const catPool = QUESTIONS.filter(q => !usedIds.has(q.id) && q.category === config.category);
+          const catPool = sourceBank.filter(q => !usedIds.has(q.id) && q.category === config.category);
           finalPool = [...finalPool, ...catPool.filter(q => !finalPool.some(fq => fq.id === q.id))];
         }
 
         // If still too small, fallback to any questions (even used) to prevent empty sub-tests
         if (finalPool.length < config.count) {
           const remainingNeeded = config.count - finalPool.length;
-          const otherPool = QUESTIONS.filter(q => !finalPool.some(fq => fq.id === q.id));
+          const otherPool = sourceBank.filter(q => !finalPool.some(fq => fq.id === q.id));
           // Shuffle otherPool and take what's needed
           const additional = [...otherPool].sort(() => Math.random() - 0.5).slice(0, remainingNeeded);
           finalPool = [...finalPool, ...additional];
         }
 
         // Final safety check: if still empty (should only happen if QUESTIONS is empty), skip or fill with anything
-        if (finalPool.length === 0 && QUESTIONS.length > 0) {
-          finalPool = [QUESTIONS[Math.floor(Math.random() * QUESTIONS.length)]];
+        if (finalPool.length === 0 && sourceBank.length > 0) {
+          finalPool = [sourceBank[Math.floor(Math.random() * sourceBank.length)]];
         }
         
         const shuffled = [...finalPool].sort(() => Math.random() - 0.5).slice(0, config.count);
@@ -143,9 +145,10 @@ export function useQuiz() {
         }
       });
     } else {
+      const basePool = mode === 'daily' || mode === 'mini' || mode === 'category' ? TRAINING_QUESTION_BANK : QUESTIONS;
       const pool = category 
-        ? QUESTIONS.filter(q => q.category === category)
-        : [...QUESTIONS];
+        ? basePool.filter(q => q.category === category)
+        : [...basePool];
 
       const wrongPool = pool.filter(q => progress.wrongIds.includes(q.id));
       const normalPool = pool.filter(q => !progress.wrongIds.includes(q.id));
@@ -177,11 +180,12 @@ export function useQuiz() {
       currentIdx: 0,
       answers: {},
       marked: {},
+      answerTimeline: {},
       startTime: Date.now(),
       timePerQuestion: {},
       isSubmitted: false,
-      subTests: mode === 'tryout' ? finalSubTests : undefined,
-      currentSubTestIdx: mode === 'tryout' ? 0 : undefined,
+      subTests: mode === 'tryout' || isStrictSimulation ? finalSubTests : undefined,
+      currentSubTestIdx: mode === 'tryout' || isStrictSimulation ? 0 : undefined,
     });
   }, [progress]);
 
@@ -206,6 +210,10 @@ export function useQuiz() {
       return {
         ...prev,
         answers: { ...prev.answers, [qId]: answer },
+        answerTimeline: {
+          ...(prev.answerTimeline ?? {}),
+          [qId]: [...(prev.answerTimeline?.[qId] ?? []), Date.now()],
+        },
       };
     });
   };
@@ -233,6 +241,7 @@ export function useQuiz() {
   const prevQuestion = () => {
     setSession(prev => {
       if (!prev || prev.currentIdx <= 0) return prev;
+      if (prev.mode === 'simulation') return prev;
       
       // If in sub-test mode, check if we can go to prev question within sub-test
       if (prev.subTests && prev.currentSubTestIdx !== undefined) {
@@ -275,6 +284,7 @@ export function useQuiz() {
 
     const correctCount = results.filter(r => r.correct).length;
     const today = new Date().toISOString().split('T')[0];
+    const durationSecs = Math.max(1, Math.round((Date.now() - session.startTime) / 1000));
 
     // IRT Scoring
     const irtScore = calculateIRTScore(results.map(r => ({
@@ -343,6 +353,54 @@ export function useQuiz() {
       materialMastery,
       recommendations
     };
+
+    const answerEdits = Object.values(session.answerTimeline ?? {}).map((events) => Math.max(0, events.length - 1));
+    const highEditQuestions = answerEdits.filter(v => v >= 2).length;
+    const avgTimePerAnswered = durationSecs / Math.max(1, Object.keys(session.answers).length);
+    const flags: string[] = [];
+    if (avgTimePerAnswered < 20) flags.push('Waktu jawab rata-rata terlalu cepat');
+    if (highEditQuestions >= Math.max(2, Math.round(session.questions.length * 0.15))) flags.push('Terlalu banyak ganti jawaban pada soal yang sama');
+    if (Object.keys(session.marked).length > Math.round(session.questions.length * 0.35)) flags.push('Proporsi soal ragu-ragu tinggi');
+
+    const instabilityLevel: AssessmentReport['stabilityAnalysis'] = {
+      level: flags.length >= 2 ? 'Tidak Stabil' : flags.length === 1 ? 'Perlu Monitoring' : 'Stabil',
+      flags,
+    };
+
+    const confidenceLevel: AssessmentReport['performancePrediction']['confidenceLevel'] =
+      instabilityLevel.level === 'Stabil' ? 'High' : instabilityLevel.level === 'Perlu Monitoring' ? 'Medium' : 'Low';
+    const confidenceDelta = confidenceLevel === 'High' ? 40 : confidenceLevel === 'Medium' ? 80 : 130;
+    const predictedRange: [number, number] = [
+      Math.max(0, Math.round(irtScore - confidenceDelta)),
+      Math.min(1000, Math.round(irtScore + confidenceDelta)),
+    ];
+
+    const weaknessPriorities = Object.entries(materialMastery)
+      .map(([domain, accuracy]) => {
+        const priority: 'Kritis' | 'Tinggi' | 'Sedang' =
+          accuracy < 45 ? 'Kritis' : accuracy < 65 ? 'Tinggi' : 'Sedang';
+        return {
+          domain,
+          accuracy,
+          priority,
+          recommendation:
+            priority === 'Kritis'
+              ? 'Ulang konsep inti + drilling bertahap 20 soal.'
+              : priority === 'Tinggi'
+                ? 'Perbanyak latihan campuran dengan pembahasan detail.'
+                : 'Pertahankan dengan review mingguan.',
+        };
+      })
+      .sort((a, b) => a.accuracy - b.accuracy)
+      .slice(0, 5);
+
+    report.performancePrediction = {
+      scoreRange: predictedRange,
+      confidenceLevel,
+      summary: `Prediksi performa berada di rentang ${predictedRange[0]}–${predictedRange[1]} (confidence ${confidenceLevel}).`,
+    };
+    report.stabilityAnalysis = instabilityLevel;
+    report.weaknessPriorities = weaknessPriorities;
 
     setProgress(prev => {
       const newWrongIds = [...prev.wrongIds];

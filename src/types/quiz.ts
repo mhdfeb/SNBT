@@ -68,6 +68,21 @@ export interface AssessmentReport {
     prodi: string;
     chance: number; // 0-100
   }[];
+  performancePrediction?: {
+    scoreRange: [number, number];
+    confidenceLevel: 'Low' | 'Medium' | 'High';
+    summary: string;
+  };
+  stabilityAnalysis?: {
+    level: 'Stabil' | 'Perlu Monitoring' | 'Tidak Stabil';
+    flags: string[];
+  };
+  weaknessPriorities?: {
+    domain: string;
+    accuracy: number;
+    priority: 'Kritis' | 'Tinggi' | 'Sedang';
+    recommendation: string;
+  }[];
 }
 
 export interface PTN {
@@ -87,12 +102,13 @@ export interface Prodi {
 }
 
 export interface QuizSession {
-  mode: 'tryout' | 'mini' | 'daily' | 'category';
+  mode: 'tryout' | 'mini' | 'daily' | 'category' | 'simulation';
   selectedCategory?: Category;
   questions: Question[];
   currentIdx: number;
   answers: { [questionId: string]: any }; // number for MC, boolean[] for Complex, number for Short
   marked: { [questionId: string]: boolean }; // "Ragu-ragu" state
+  answerTimeline?: { [questionId: string]: number[] }; // timestamps for answer changes
   startTime: number;
   timePerQuestion: { [questionId: string]: number };
   isSubmitted: boolean;
