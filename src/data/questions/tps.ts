@@ -1,6 +1,7 @@
-import { withBlueprintMetadata, type QuestionSeed } from './quality';
+import { withBlueprintMetadata } from './quality';
+import type { Question } from '../../types/quiz';
 
-export const TPS_QUESTIONS: QuestionSeed[] = withBlueprintMetadata([
+export const TPS_QUESTIONS: Question[] = withBlueprintMetadata([
   // --- TPS: Penalaran Induktif ---
   {
     id: 'pi-1',

@@ -17,7 +17,6 @@ import {
   auditTryoutPackages,
   assessQuestionValidity,
 } from './questionGovernance';
-import type { QuestionSeed } from './questions/quality';
 
 const DEFAULT_EDITORIAL_CHECKLIST = {
   stemClarity: true,
@@ -103,11 +102,11 @@ const FALLBACK_EDITORIAL_METADATA: EditorialMetadata = {
   ],
 };
 
-function inferLifecycleStatus(question: QuestionSeed): ItemLifecycleStatus {
+function inferLifecycleStatus(question: Question): ItemLifecycleStatus {
   return LIFECYCLE_OVERRIDES[question.id] ?? 'active';
 }
 
-function buildQualityMetadata(question: QuestionSeed): QuestionQualityMetadata {
+function buildQualityMetadata(question: Question): QuestionQualityMetadata {
   return {
     subtopic: SUBTOPIC_BY_CONCEPT[question.concept],
     cognitiveLevel: COGNITIVE_LEVEL_BY_DIFFICULTY[question.difficulty],
@@ -117,7 +116,7 @@ function buildQualityMetadata(question: QuestionSeed): QuestionQualityMetadata {
   };
 }
 
-function withQualityMetadata(questionBank: QuestionSeed[]): Question[] {
+function withQualityMetadata(questionBank: Question[]): Question[] {
   return questionBank.map((question) => ({
     ...question,
     qualityMetadata: buildQualityMetadata(question),
@@ -125,11 +124,11 @@ function withQualityMetadata(questionBank: QuestionSeed[]): Question[] {
   }));
 }
 
-function uniqueById(questionBank: QuestionSeed[]): QuestionSeed[] {
+function uniqueById(questionBank: Question[]): Question[] {
   return Array.from(new Map(questionBank.map((question) => [question.id, question])).values());
 }
 
-const QUESTION_SEEDS: QuestionSeed[] = uniqueById([
+const QUESTION_SEEDS: Question[] = uniqueById([
   ...TPS_QUESTIONS,
   ...LITERASI_ID_QUESTIONS,
   ...LITERASI_EN_QUESTIONS,

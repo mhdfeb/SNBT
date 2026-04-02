@@ -2,68 +2,50 @@
   <img width="1200" height="475" alt="SNBT Platform Banner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
 </div>
 
-# SNBT Practice App
+# SNBT Practice Arena
 
-Aplikasi latihan SNBT berbasis **React + Vite** dengan mode quiz, analytics/report, dan penyimpanan progress lokal.
+Aplikasi latihan SNBT berbasis React + Vite dengan question bank terstruktur, mode tryout/simulasi, dan analitik progres belajar.
 
-## Overview
+## Menjalankan Lokal
 
-Platform ini dibuat untuk membantu calon mahasiswa meningkatkan peluang lolos PTN melalui:
-- tryout SNBT terstruktur,
-- evaluasi kelemahan per konsep,
-- dan materi belajar remedial yang terarah.
-
-## Setup
-
-**Prasyarat minimum toolchain:** **Node.js 20+**.
-
-1. Install dependency:
-   ```bash
-   npm install
-   ```
-2. Salin contoh environment:
-   ```bash
-   cp .env.example .env.local
-   ```
-3. Jalankan development server:
-   ```bash
-   npm run dev
-   ```
-4. Buka URL lokal yang ditampilkan terminal (default: `http://localhost:5000`).
-
-## Build
+**Prasyarat:** Node.js 20+
 
 ```bash
-npm run build
-npm run preview
+npm install
+cp .env.example .env.local
+npm run dev
 ```
 
-## Deploy
+Default dev server: `http://localhost:5000`.
 
-Panduan publish ke Vercel + custom domain + HTTPS + smoke test tersedia di: **[`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md)**.
+## Quality Checks
 
-## Troubleshooting singkat
+```bash
+npm run typecheck
+npm run build
+```
 
-1. **Build gagal karena conflict merge**
-   - Cek marker conflict:
-     ```bash
-     rg -n '^(<<<<<<<|=======|>>>>>>>)' .
-     ```
-   - Selesaikan semua conflict, lalu jalankan ulang:
-     ```bash
-     npm run build
-     ```
+## Environment Variables
 
-2. **App gagal jalan karena env vars wajib belum diisi**
-   - Pastikan `.env.local` sudah dibuat dari `.env.example`.
-   - Isi minimal variabel wajib berikut:
-     - `GEMINI_API_KEY`
-     - `VITE_APP_BASE_URL`
-     - `VITE_APP_VERSION`
+Wajib diisi:
 
-## Owner / Contact
+- `GEMINI_API_KEY`
+- `VITE_APP_BASE_URL`
+- `VITE_APP_VERSION`
 
-Aplikasi ini dikelola sebagai **platform pribadi**.
+Opsional:
 
-- **Owner:** Pemilik Pribadi
-- **Kontak:** isi email/WA bisnis
+- `VITE_ANALYTICS_ID`
+
+Lihat contoh lengkap di `.env.example`.
+
+## Deploy (Vercel)
+
+Konfigurasi deploy ada di `vercel.json`:
+
+- install command: `npm ci`
+- build command: `npm run build` (juga tersedia alias `npm run vercel-build`)
+- output directory: `dist`
+- SPA rewrite ke `index.html`
+
+Panduan detail deployment: [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md).

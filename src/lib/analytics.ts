@@ -45,3 +45,12 @@ export const trackPageView = (pagePath: string) => {
     app_version: runtimeConfig.appVersion,
   });
 };
+
+export const trackEvent = (eventName: string, params?: Record<string, string | number | boolean>) => {
+  if (!initialized || !window.gtag) return;
+
+  window.gtag('event', eventName, {
+    app_version: runtimeConfig.appVersion,
+    ...params,
+  });
+};
