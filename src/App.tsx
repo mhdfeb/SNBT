@@ -289,6 +289,7 @@ export default function App() {
   const [view, setView] = useState<'dashboard' | 'quiz' | 'analytics' | 'report' | 'study'>('dashboard');
   const [selectedReport, setSelectedReport] = useState<AssessmentReport | null>(null);
   const [selectedMaterial, setSelectedMaterial] = useState<StudyMaterial | null>(null);
+  const [revealedCheckpointAnswers, setRevealedCheckpointAnswers] = useState<Record<string, boolean>>({});
 
   const [showExitConfirm, setShowExitConfirm] = useState(false);
   const [showSubTestConfirm, setShowSubTestConfirm] = useState(false);
@@ -1075,6 +1076,7 @@ export default function App() {
   );
 
   const getReadingTime = (content: string) => Math.max(2, Math.ceil(content.split(' ').length / 200));
+  const getPriorityLabel = (priority?: StudyMaterial['priority']) => priority ?? 'medium';
 
   const StudyView = () => (
     <div className="min-h-screen bg-[#f0f4ff] pb-32">
@@ -1168,7 +1170,10 @@ export default function App() {
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: idx * 0.04 }}
                 whileHover={{ y: -6, transition: { duration: 0.2 } }}
-                onClick={() => setSelectedMaterial(material)}
+                onClick={() => {
+                  setSelectedMaterial(material);
+                  setRevealedCheckpointAnswers({});
+                }}
                 className="bg-white rounded-[32px] border border-slate-200 shadow-sm hover:shadow-xl text-left overflow-hidden group transition-all duration-300"
               >
                 {/* Card header strip */}
@@ -1189,6 +1194,16 @@ export default function App() {
                         isPrediksi ? "bg-violet-50 text-violet-600" : `${meta.bg} bg-opacity-10 ${meta.color}`
                       )}>
                         {isPrediksi ? '🔮 Prediksi 2026' : material.category}
+                      </span>
+                      <span className={cn(
+                        "text-[10px] font-black uppercase tracking-widest px-2.5 py-1 rounded-full",
+                        getPriorityLabel(material.priority) === 'high'
+                          ? "bg-rose-100 text-rose-700"
+                          : getPriorityLabel(material.priority) === 'medium'
+                          ? "bg-amber-100 text-amber-700"
+                          : "bg-emerald-100 text-emerald-700"
+                      )}>
+                        Prioritas {getPriorityLabel(material.priority)}
                       </span>
                     </div>
                     <h3 className="text-lg font-black text-slate-900 leading-snug group-hover:text-indigo-700 transition-colors">
@@ -1240,7 +1255,10 @@ export default function App() {
                   <div className="absolute inset-0 bg-gradient-to-t from-slate-900 via-slate-900/70 to-transparent" />
                   <div className="relative z-10 p-10 space-y-4 w-full">
                     <button
-                      onClick={() => setSelectedMaterial(null)}
+                      onClick={() => {
+                        setSelectedMaterial(null);
+                        setRevealedCheckpointAnswers({});
+                      }}
                       className="flex items-center gap-2 text-white/70 hover:text-white font-black text-xs uppercase tracking-widest transition-colors mb-4"
                     >
                       <ChevronLeft size={16} /> Kembali ke Daftar
@@ -1254,6 +1272,16 @@ export default function App() {
                       </span>
                       <span className="px-4 py-1.5 bg-white/10 backdrop-blur-sm rounded-full text-white/70 text-[10px] font-bold border border-white/10">
                         ⏱ {getReadingTime(selectedMaterial.fullContent)} menit baca
+                      </span>
+                      <span className={cn(
+                        "px-4 py-1.5 backdrop-blur-sm rounded-full text-[10px] font-black uppercase tracking-widest border",
+                        getPriorityLabel(selectedMaterial.priority) === 'high'
+                          ? "bg-rose-500/30 text-rose-100 border-rose-300/40"
+                          : getPriorityLabel(selectedMaterial.priority) === 'medium'
+                          ? "bg-amber-500/30 text-amber-100 border-amber-300/40"
+                          : "bg-emerald-500/30 text-emerald-100 border-emerald-300/40"
+                      )}>
+                        Prioritas {getPriorityLabel(selectedMaterial.priority)}
                       </span>
                     </div>
                     <h2 className="text-4xl md:text-5xl font-black text-white leading-[1.1] tracking-tight">
@@ -1278,6 +1306,78 @@ export default function App() {
                     <p className="text-indigo-900 text-lg leading-relaxed font-medium italic relative z-10">
                       "{selectedMaterial.summary}"
                     </p>
+                  </div>
+
+                  <div className="grid md:grid-cols-2 gap-5">
+                    <div className="bg-slate-50 rounded-3xl border border-slate-200 p-6">
+                      <p className="text-[11px] font-black uppercase tracking-widest text-slate-500 mb-2">Ringkasan 30 Detik</p>
+                      <p className="text-slate-700 font-medium leading-relaxed">{selectedMaterial.quick30sSummary ?? selectedMaterial.summary}</p>
+                    </div>
+                    <div className="bg-white rounded-3xl border border-slate-200 p-6">
+                      <p className="text-[11px] font-black uppercase tracking-widest text-slate-500 mb-2">Dampak ke Skor</p>
+                      <p className="text-slate-700 font-medium leading-relaxed">{selectedMaterial.scoreImpact ?? 'Dampak skor menengah: fokus pada penguatan akurasi dan konsistensi.'}</p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-5">
+                    <h4 className="font-black text-slate-900 text-xl">Blok Studi + Checkpoint Interaktif</h4>
+                    {(selectedMaterial.studyBlocks ?? []).map((block) => (
+                      <div key={block.id} className="bg-white border border-slate-200 rounded-[28px] p-6 space-y-5">
+                        <h5 className="font-black text-slate-900">{block.title}</h5>
+                        <div className="grid md:grid-cols-2 gap-4">
+                          <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100">
+                            <p className="text-xs font-black uppercase tracking-widest text-slate-500 mb-2">Konsep Inti</p>
+                            <p className="text-sm text-slate-700">{block.coreConcept}</p>
+                          </div>
+                          <div className="bg-indigo-50 rounded-2xl p-4 border border-indigo-100">
+                            <p className="text-xs font-black uppercase tracking-widest text-indigo-600 mb-2">Worked Example</p>
+                            <p className="text-sm text-indigo-900">{block.workedExample}</p>
+                          </div>
+                        </div>
+                        <div className="space-y-2">
+                          <p className="text-xs font-black uppercase tracking-widest text-rose-600">Kesalahan Umum</p>
+                          <ul className="list-disc pl-5 text-sm text-slate-700 space-y-1">
+                            {block.commonMistakes.map((mistake, idx) => <li key={idx}>{mistake}</li>)}
+                          </ul>
+                        </div>
+                        <div className="bg-emerald-50 rounded-2xl p-4 border border-emerald-100">
+                          <p className="text-xs font-black uppercase tracking-widest text-emerald-700 mb-1">Latihan Cepat</p>
+                          <p className="text-sm text-emerald-900">{block.quickExercise}</p>
+                        </div>
+                        <div className="bg-amber-50 rounded-2xl p-4 border border-amber-100">
+                          <p className="text-xs font-black uppercase tracking-widest text-amber-700 mb-1">Kapan Pakai Strategi Ini</p>
+                          <p className="text-sm text-amber-900">{block.strategyWhenToUse}</p>
+                        </div>
+                        <div className="space-y-3">
+                          <p className="text-xs font-black uppercase tracking-widest text-slate-500">Checkpoint (2-3 Soal Pendek)</p>
+                          {block.checkpoints.map((cp, cpIdx) => {
+                            const answerKey = `${block.id}-${cpIdx}`;
+                            const revealed = !!revealedCheckpointAnswers[answerKey];
+                            return (
+                              <div key={answerKey} className="rounded-2xl border border-slate-200 p-4 bg-slate-50">
+                                <p className="text-sm font-bold text-slate-800">{cpIdx + 1}. {cp.question}</p>
+                                {revealed && <p className="text-sm text-emerald-700 mt-2"><strong>Jawaban:</strong> {cp.answer}</p>}
+                                <button
+                                  onClick={() => setRevealedCheckpointAnswers(prev => ({ ...prev, [answerKey]: !revealed }))}
+                                  className="mt-3 text-xs font-black uppercase tracking-widest text-indigo-600 hover:text-indigo-800"
+                                >
+                                  {revealed ? 'Sembunyikan Jawaban' : 'Lihat Jawaban'}
+                                </button>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="bg-slate-50 rounded-[28px] border border-slate-200 p-6">
+                    <h4 className="font-black text-slate-900 mb-3">Catatan Revisi Berkala</h4>
+                    <ul className="space-y-2 text-sm text-slate-700">
+                      {(selectedMaterial.revisionNotes ?? []).map((note, idx) => (
+                        <li key={idx} className="flex gap-2"><CheckCircle2 size={16} className="mt-0.5 text-emerald-600" /> {note}</li>
+                      ))}
+                    </ul>
                   </div>
 
                   {/* Full Content */}
