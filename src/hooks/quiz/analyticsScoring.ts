@@ -210,19 +210,51 @@ export const calculateSessionReport = (session: QuizSession, progress: UserProgr
   } as AssessmentReport;
 };
 
+const hasValidMultipleChoiceEvaluator = (question: Question): question is Question & { options: string[]; correctAnswer: number } => {
+  if (!Array.isArray(question.options) || question.options.length === 0) return false;
+  if (typeof question.correctAnswer !== 'number') return false;
+  return question.correctAnswer >= 0 && question.correctAnswer < question.options.length;
+};
+
+const hasValidShortAnswerEvaluator = (question: Question): question is Question & { shortAnswerCorrect: number } => {
+  return typeof question.shortAnswerCorrect === 'number' && Number.isFinite(question.shortAnswerCorrect);
+};
+
+const hasValidComplexChoiceEvaluator = (
+  question: Question,
+): question is Question & { complexOptions: { statement: string; correct: boolean }[] } => {
+  if (!Array.isArray(question.complexOptions) || question.complexOptions.length === 0) return false;
+  return question.complexOptions.every(
+    (option) => typeof option.statement === 'string' && option.statement.trim().length > 0 && typeof option.correct === 'boolean',
+  );
+};
+
 const isAnswerCorrect = (question: Question, answer: QuestionAnswer): boolean => {
   if (answer === undefined || answer === null) return false;
 
   if (question.type === 'multiple_choice') {
+    if (!hasValidMultipleChoiceEvaluator(question)) return false;
+    if (typeof answer !== 'number' || !Number.isInteger(answer)) return false;
     return answer === question.correctAnswer;
   }
 
   if (question.type === 'short_answer') {
+    if (!hasValidShortAnswerEvaluator(question)) return false;
+    if (typeof answer !== 'number' || Number.isNaN(answer)) return false;
     return Number(answer) === Number(question.shortAnswerCorrect);
   }
 
-  if (question.type === 'complex_multiple_choice' && Array.isArray(answer) && Array.isArray(question.complexOptions)) {
-    return question.complexOptions.every((option, index) => Boolean(answer[index]) === option.correct);
+  if (question.type === 'complex_multiple_choice') {
+    if (!hasValidComplexChoiceEvaluator(question)) return false;
+    if (!Array.isArray(answer) || answer.some((item) => item === null || item === undefined || typeof item !== 'boolean')) {
+      return false;
+    }
+
+    return question.complexOptions.every((option, index) => {
+      const selected = answer[index];
+      if (selected === null || selected === undefined) return false;
+      return selected === option.correct;
+    });
   }
 
   return false;

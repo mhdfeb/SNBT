@@ -46,30 +46,17 @@ function QuestionCard({
     );
   }
 
-  return (
-    <div className="space-y-3">
-      <p className="font-semibold text-slate-700">{question.question}</p>
-      <div className="space-y-2">
-        {question.options?.map((option, idx) => {
-          const selected = answer === idx;
-          return (
-            <button
-              key={`${question.id}-${idx}`}
-              type="button"
-              disabled={submitted}
-              onClick={() => onAnswer(idx)}
-              className={`w-full rounded-lg border p-3 text-left transition ${
-                selected ? 'border-indigo-500 bg-indigo-50' : 'border-slate-200 hover:border-slate-300'
-              }`}
-            >
-              {String.fromCharCode(65 + idx)}. {option}
-            </button>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
+const SESSION_MODES: { mode: QuizSession['mode']; label: string }[] = [
+  { mode: 'mini', label: 'Mini Quiz' },
+  { mode: 'daily', label: 'Daily 5' },
+  { mode: 'drill15', label: 'Drill 15' },
+  { mode: 'tryout', label: 'Tryout' },
+  { mode: 'simulation', label: 'Simulation' },
+  { mode: 'category', label: 'Category Focus' },
+  { mode: 'targeted', label: 'Targeted Concept' },
+];
+
+type AppView = 'home' | 'quiz' | 'result' | 'dashboard' | 'materials' | 'target';
 
 const screenOrder: Screen[] = ['Dashboard', 'Tryout', 'Simulation', 'Target PTN', 'Materi', 'Review'];
 
@@ -187,6 +174,13 @@ export default function App() {
     });
   }, [selectedPtn]);
 
+  useEffect(() => {
+    if (!selectedPtn) return;
+    if (!selectedPtn.prodi.some((prodi) => prodi.id === selectedProdiId)) {
+      setSelectedProdiId(selectedPtn.prodi[0]?.id ?? '');
+    }
+  }, [selectedPtn, selectedProdiId]);
+
   const activeSubTest = useMemo(() => {
     if (!session?.subTests?.length) return null;
     return session.subTests[session.currentSubTestIdx ?? 0] ?? null;
@@ -223,7 +217,7 @@ export default function App() {
 
       {session && currentQuestion ? (
         <>
-          <QuestionCard
+          <QuestionRenderer
             question={currentQuestion}
             answer={session.answers[currentQuestion.id]}
             onAnswer={answerQuestion}
