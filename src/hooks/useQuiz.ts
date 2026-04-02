@@ -15,6 +15,23 @@ import { loadProgressFromStorage, STORAGE_KEY } from './quiz/progressMigration';
 import { buildSubTestConfig, pickQuestionsByMode } from './quiz/questionSelection';
 
 const clamp = (value: number, min: number, max: number): number => Math.min(max, Math.max(min, value));
+const isFiniteNumberAnswer = (answer: QuestionAnswer): answer is number =>
+  typeof answer === 'number' && Number.isFinite(answer);
+
+const normalizeAnswerByQuestion = (
+  questionType: 'multiple_choice' | 'complex_multiple_choice' | 'short_answer',
+  answer: QuestionAnswer,
+): QuestionAnswer => {
+  if (questionType === 'short_answer') {
+    return isFiniteNumberAnswer(answer) ? answer : null;
+  }
+
+  if (questionType === 'complex_multiple_choice') {
+    return Array.isArray(answer) ? answer : null;
+  }
+
+  return isFiniteNumberAnswer(answer) ? answer : null;
+};
 
 export function useQuiz() {
   const [progress, setProgress] = useState<UserProgress>(() => loadProgressFromStorage());
@@ -156,7 +173,7 @@ export function useQuiz() {
       const nowIso = new Date().toISOString();
       const newCompletedIds = Array.from(new Set([...prev.completedIds, ...session.questions.map((q) => q.id)]));
       const perQuestionResult = session.questions.map((q) => {
-        const answer = session.answers[q.id];
+        const answer = normalizeAnswerByQuestion(q.type, session.answers[q.id] ?? null);
         const isCorrect =
           q.type === 'multiple_choice'
             ? typeof answer === 'number' && answer === q.correctAnswer
