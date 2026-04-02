@@ -287,11 +287,17 @@ export function useQuiz() {
 
   const nextSubTest = useCallback(() => {
     setSession((prev) => {
-      if (!prev || prev.isSubmitted || !prev.subTests?.length) return prev;
+      if (!prev || prev.isSubmitted) return prev;
+      if (!Array.isArray(prev.subTests) || prev.subTests.length === 0) return prev;
 
       const now = Date.now();
-      const currentSubTestIdx = prev.currentSubTestIdx ?? 0;
-      const isLastSubTest = currentSubTestIdx >= prev.subTests.length - 1;
+      const totalSubTests = prev.subTests.length;
+      const rawCurrentSubTestIdx = prev.currentSubTestIdx ?? 0;
+      const currentSubTestIdx =
+        Number.isInteger(rawCurrentSubTestIdx) && rawCurrentSubTestIdx >= 0 && rawCurrentSubTestIdx < totalSubTests
+          ? rawCurrentSubTestIdx
+          : 0;
+      const isLastSubTest = currentSubTestIdx >= totalSubTests - 1;
 
       if (isLastSubTest) {
         return {
@@ -303,7 +309,11 @@ export function useQuiz() {
 
       const nextSubTestIdx = currentSubTestIdx + 1;
       const nextSubTest = prev.subTests[nextSubTestIdx];
-      const nextQuestionIdx = nextSubTest?.questionIndices?.[0] ?? prev.currentIdx;
+      const nextQuestionIdxCandidate = nextSubTest?.questionIndices?.[0];
+      const nextQuestionIdx =
+        typeof nextQuestionIdxCandidate === 'number'
+          ? clamp(nextQuestionIdxCandidate, 0, Math.max(prev.questions.length - 1, 0))
+          : prev.currentIdx;
 
       return {
         ...prev,
@@ -314,7 +324,8 @@ export function useQuiz() {
           idx === nextSubTestIdx
             ? {
                 ...subTest,
-                expiresAt: now + subTest.timeLimit * 1000,
+                expiresAt:
+                  typeof subTest.expiresAt === 'number' ? now + Math.max(0, (subTest.timeLimit ?? 0) * 1000) : subTest.expiresAt,
               }
             : subTest,
         ),
