@@ -1,31 +1,91 @@
-import { useEffect, useMemo, useState } from 'react';
-import {
-  BarChart3,
-  BookOpen,
-  CheckCircle2,
-  ChevronLeft,
-  ChevronRight,
-  Home,
-  Sparkles,
-  Target,
-  TrendingUp,
-} from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { AlertCircle, BookOpen, CheckCircle2, ChevronLeft, ChevronRight, Home, LoaderCircle, Target } from 'lucide-react';
 import { useQuiz } from './hooks/useQuiz';
 import { QUESTIONS } from './data/questions';
-import { QuestionRenderer } from './components/quiz/QuestionRenderer';
-import type { Concept, QuizSession } from './types/quiz';
+import { PTN_DATA } from './data/ptn';
+import type { Question, QuestionAnswer } from './types/quiz';
+import { Button, Card, Field, StatePanel } from './components/ui';
+import { trackEvent, trackPageView } from './lib/analytics';
+import { markMainPageRender, markQuestionNavigationLatency } from './lib/slo';
 
-const SESSION_MODES: { mode: QuizSession['mode']; label: string }[] = [
-  { mode: 'mini', label: 'Mini Quiz' },
-  { mode: 'daily', label: 'Daily 5' },
-  { mode: 'drill15', label: 'Drill 15' },
-  { mode: 'tryout', label: 'Tryout' },
-  { mode: 'simulation', label: 'Simulation' },
-  { mode: 'category', label: 'Category Focus' },
-  { mode: 'targeted', label: 'Targeted Concept' },
-];
+function QuestionCard({
+  question,
+  answer,
+  onAnswer,
+  submitted,
+}: {
+  question: Question;
+  answer: QuestionAnswer;
+  onAnswer: (value: QuestionAnswer) => void;
+  submitted: boolean;
+}) {
+  const cardRef = useRef<HTMLDivElement | null>(null);
 
-type AppView = 'home' | 'quiz' | 'result' | 'dashboard' | 'materials' | 'target';
+  useEffect(() => {
+    cardRef.current?.focus();
+  }, [question.id]);
+
+  if (question.type === 'short_answer') {
+    return (
+      <Card>
+        <div ref={cardRef} tabIndex={-1} className="space-y-3 focus-visible:outline-none" aria-live="polite">
+          <p className="font-semibold text-slate-900">{question.question}</p>
+          <Field
+            label="Jawaban singkat"
+            type="number"
+            value={typeof answer === 'number' ? answer : ''}
+            disabled={submitted}
+            onChange={(e) => onAnswer(Number(e.target.value))}
+            placeholder="Masukkan jawaban"
+            aria-label="Input jawaban numerik"
+          />
+        </div>
+      </Card>
+    );
+  }
+
+  return (
+    <Card>
+      <div
+        ref={cardRef}
+        tabIndex={-1}
+        className="space-y-3 focus-visible:outline-none"
+        role="radiogroup"
+        aria-label="Pilihan jawaban"
+        aria-live="polite"
+      >
+        <p className="font-semibold text-slate-900">{question.question}</p>
+        <div className="space-y-2">
+          {question.options?.map((option, idx) => {
+            const selected = answer === idx;
+            return (
+              <button
+                key={`${question.id}-${idx}`}
+                type="button"
+                role="radio"
+                aria-checked={selected}
+                aria-label={`Opsi ${String.fromCharCode(65 + idx)}: ${option}`}
+                disabled={submitted}
+                onClick={() => onAnswer(idx)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    onAnswer(idx);
+                  }
+                }}
+                className={`w-full rounded-xl border p-3 text-left transition focus-visible:outline-3 focus-visible:outline-indigo-500 ${
+                  selected ? 'border-indigo-700 bg-indigo-100 text-indigo-950' : 'border-slate-300 hover:border-slate-400'
+                }`}
+              >
+                {String.fromCharCode(65 + idx)}. {option}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </Card>
+  );
+}
 
 export default function App() {
   const {
@@ -38,48 +98,61 @@ export default function App() {
     submitQuiz,
     nextSubTest,
     setSession,
+    setTarget,
   } = useQuiz();
 
   const [view, setView] = useState<AppView>('home');
   const [now, setNow] = useState(() => Date.now());
-  const [selectedPtnId, setSelectedPtnId] = useState<string>(PTN_DATA[0]?.id ?? '');
-  const [selectedProdiId, setSelectedProdiId] = useState<string>(PTN_DATA[0]?.prodi[0]?.id ?? '');
+  const [isBootLoading, setBootLoading] = useState(true);
+  const [appError, setAppError] = useState<string | null>(null);
+  const [selectedPtn, setSelectedPtn] = useState(PTN_DATA[0]?.id ?? '');
+  const [selectedProdi, setSelectedProdi] = useState(PTN_DATA[0]?.prodi[0]?.id ?? '');
+  const navStartRef = useRef<number>(0);
 
   const currentQuestion = useMemo(() => {
     if (!session) return null;
     return session.questions[session.currentIdx] ?? null;
   }, [session]);
 
-  const firstCategory = useMemo(() => QUESTIONS[0]?.category, []);
-  const availableConcepts = useMemo(
-    () => Array.from(new Set(QUESTIONS.map((question) => question.concept).filter(Boolean))) as Concept[],
-    [],
-  );
-  const weakestConcept = useMemo(() => {
-    if (availableConcepts.length === 0) return undefined;
+  const selectedPtnData = useMemo(() => PTN_DATA.find((ptn) => ptn.id === selectedPtn), [selectedPtn]);
 
-    const mastered = progress.materialMastery ?? {};
-    return [...availableConcepts].sort((a, b) => (mastered[a] ?? 0) - (mastered[b] ?? 0))[0];
-  }, [availableConcepts, progress.materialMastery]);
+  useEffect(() => {
+    const startedAt = performance.now();
+    const timeout = window.setTimeout(() => {
+      setBootLoading(false);
+      markMainPageRender(startedAt);
+    }, 250);
+    return () => window.clearTimeout(timeout);
+  }, []);
 
-  const startModeSession = (mode: QuizSession['mode']) => {
-    if (mode === 'category' && firstCategory) {
-      startSession(mode, firstCategory);
-    } else if (mode === 'targeted') {
-      startSession(mode, undefined, { concept: weakestConcept ?? availableConcepts[0] });
-    } else {
-      startSession(mode);
+  useEffect(() => {
+    trackPageView(`/${view}`);
+  }, [view]);
+
+
+  useEffect(() => {
+    if (view === 'result') {
+      trackEvent('view_recommendation', { report_count: progress.reports?.length ?? 0 });
     }
-    setView('quiz');
-  };
+  }, [view, progress.reports]);
 
-  const startTargetedDrill = (concept: Concept) => {
-    startSession('targeted', undefined, { concept });
-    setView('quiz');
+  const startQuickQuiz = () => {
+    try {
+      startSession('mini');
+      trackEvent('start_quiz', { mode: 'mini' });
+      setView('quiz');
+    } catch (error) {
+      setAppError('Gagal memulai kuis. Silakan coba lagi.');
+      console.error(error);
+    }
   };
 
   const finishQuiz = () => {
     submitQuiz();
+    trackEvent('submit_quiz', {
+      answered_count: Object.keys(session?.answers ?? {}).length,
+      total_questions: session?.questions.length ?? 0,
+    });
     setView('result');
   };
 
@@ -122,250 +195,143 @@ export default function App() {
     return Math.max(0, Math.ceil((activeSubTest.expiresAt - now) / 1000));
   }, [activeSubTest, now]);
 
+  const handleQuestionMove = (action: 'prev' | 'next') => {
+    navStartRef.current = performance.now();
+    if (action === 'next') {
+      nextQuestion();
+    } else {
+      prevQuestion();
+    }
+    requestAnimationFrame(() => {
+      markQuestionNavigationLatency(performance.now() - navStartRef.current);
+    });
+  };
+
+  const applyTarget = () => {
+    if (!selectedPtn || !selectedProdi) {
+      setAppError('Silakan pilih PTN dan prodi terlebih dahulu.');
+      return;
+    }
+    setTarget({ ptnId: selectedPtn, prodiId: selectedProdi });
+  };
+
+  if (isBootLoading) {
+    return (
+      <main className="mx-auto flex min-h-screen max-w-3xl items-center px-6 py-10">
+        <StatePanel
+          kind="loading"
+          title="Menyiapkan dashboard SNBT"
+          description="Sedang memuat bank soal dan progres terakhir Anda."
+          action={<LoaderCircle className="animate-spin" aria-hidden="true" />}
+        />
+      </main>
+    );
+  }
+
+  if (appError) {
+    return (
+      <main className="mx-auto flex min-h-screen max-w-3xl items-center px-6 py-10">
+        <StatePanel
+          kind="error"
+          title="Terjadi kendala"
+          description={appError}
+          action={
+            <Button variant="secondary" onClick={() => setAppError(null)} aria-label="Coba lagi">
+              <AlertCircle size={16} /> Coba lagi
+            </Button>
+          }
+        />
+      </main>
+    );
+  }
+
   if (view === 'home') {
     return (
-      <main className="mx-auto flex min-h-screen max-w-4xl flex-col justify-center gap-6 px-6 py-10">
-        <h1 className="text-3xl font-bold text-slate-900">SNBT Practice Arena</h1>
-        <p className="text-slate-600">
-          Bank soal aktif: <span className="font-semibold">{QUESTIONS.length}</span> soal.
+      <main className="mx-auto flex min-h-screen max-w-3xl flex-col justify-center gap-6 px-6 py-10">
+        <h1 className="text-3xl font-bold text-slate-950">SNBT Practice Arena</h1>
+        <p className="text-slate-700">
+          Bank soal aktif: <span className="font-semibold text-slate-900">{QUESTIONS.length}</span> soal.
         </p>
-        <div className="flex flex-wrap gap-3">
-          {SESSION_MODES.map((item) => (
-            <button
-              key={item.mode}
-              type="button"
-              onClick={() => startModeSession(item.mode)}
-              className="inline-flex w-fit items-center gap-2 rounded-xl bg-indigo-600 px-5 py-3 font-semibold text-white hover:bg-indigo-700"
-            >
-              <Target size={18} /> {item.label}
-            </button>
-          ))}
-        </div>
+
+        <Card className="space-y-3">
+          <h2 className="font-bold text-slate-900">Target PTN</h2>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="space-y-1 text-sm font-semibold text-slate-800">
+              <span>Pilih PTN</span>
+              <select
+                className="w-full rounded-xl border border-slate-300 p-2"
+                value={selectedPtn}
+                onChange={(e) => {
+                  const nextPtn = e.target.value;
+                  setSelectedPtn(nextPtn);
+                  setSelectedProdi(PTN_DATA.find((ptn) => ptn.id === nextPtn)?.prodi[0]?.id ?? '');
+                }}
+                aria-label="Pilih perguruan tinggi negeri"
+              >
+                {PTN_DATA.map((ptn) => (
+                  <option key={ptn.id} value={ptn.id}>
+                    {ptn.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="space-y-1 text-sm font-semibold text-slate-800">
+              <span>Pilih Prodi</span>
+              <select
+                className="w-full rounded-xl border border-slate-300 p-2"
+                value={selectedProdi}
+                onChange={(e) => setSelectedProdi(e.target.value)}
+                aria-label="Pilih program studi"
+              >
+                {(selectedPtnData?.prodi ?? []).map((prodi) => (
+                  <option key={prodi.id} value={prodi.id}>
+                    {prodi.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+          <Button variant="secondary" onClick={applyTarget} aria-label="Tetapkan target PTN">
+            Tetapkan Target
+          </Button>
+        </Card>
+
+        <Button type="button" onClick={startQuickQuiz} className="w-fit" aria-label="Mulai quiz cepat">
+          <Target size={18} /> Mulai Quiz Cepat
+        </Button>
       </main>
     );
   }
 
   if (view === 'result') {
     return (
-      <main className="mx-auto flex min-h-screen max-w-4xl flex-col justify-center gap-4 px-6 py-10">
-        <h2 className="text-2xl font-bold text-slate-900">Quiz selesai</h2>
-        <p className="text-slate-600">
-          Total sesi tersimpan: <span className="font-semibold">{progress.reports?.length ?? 0}</span>
-        </p>
-        <div className="flex flex-wrap gap-3">
-          <button
-            type="button"
-            onClick={() => {
-              setSession(null);
-              setView('home');
-            }}
-            className="inline-flex w-fit items-center gap-2 rounded-xl border border-slate-300 px-5 py-3 font-semibold text-slate-700 hover:bg-slate-50"
-          >
-            <Home size={18} /> Kembali ke beranda
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setSession(null);
-              setView('dashboard');
-            }}
-            className="inline-flex w-fit items-center gap-2 rounded-xl bg-indigo-600 px-5 py-3 font-semibold text-white hover:bg-indigo-700"
-          >
-            <BarChart3 size={18} /> Lihat Analisis Progres
-          </button>
-        </div>
-      </main>
-    );
-  }
-
-  if (view === 'dashboard') {
-    return (
-      <main className="mx-auto flex min-h-screen max-w-4xl flex-col gap-6 px-6 py-10">
-        <header className="flex items-center justify-between">
-          <h2 className="text-2xl font-bold text-slate-900">Dashboard Progres</h2>
-          <button
-            type="button"
-            onClick={() => setView('home')}
-            className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-4 py-2 text-slate-700"
-          >
-            <Home size={16} /> Beranda
-          </button>
-        </header>
-
-        {!latestReport ? (
-          <p className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-amber-800">
-            Belum ada report. Jalankan quiz dulu untuk melihat kategori lemah/kuat.
-          </p>
+      <main className="mx-auto flex min-h-screen max-w-3xl flex-col justify-center gap-4 px-6 py-10">
+        <h2 className="text-2xl font-bold text-slate-950">Quiz selesai</h2>
+        {(progress.reports?.length ?? 0) === 0 ? (
+          <StatePanel
+            kind="empty"
+            title="Belum ada riwayat"
+            description="Belum ada laporan kuis tersimpan. Mulai kuis untuk melihat rekomendasi belajar."
+          />
         ) : (
-          <>
-            <section className="grid gap-3 sm:grid-cols-3">
-              <div className="rounded-xl border border-slate-200 p-4">
-                <p className="text-sm text-slate-500">Skor terakhir</p>
-                <p className="text-2xl font-bold text-slate-900">{latestReport.totalScore}</p>
-              </div>
-              <div className="rounded-xl border border-slate-200 p-4">
-                <p className="text-sm text-slate-500">Konsep lemah</p>
-                <p className="text-2xl font-bold text-rose-600">{weakConcepts.length}</p>
-              </div>
-              <div className="rounded-xl border border-slate-200 p-4">
-                <p className="text-sm text-slate-500">Konsep kuat</p>
-                <p className="text-2xl font-bold text-emerald-600">{strongConcepts.length}</p>
-              </div>
-            </section>
-
-            <section className="grid gap-4 md:grid-cols-2">
-              <div className="rounded-xl border border-rose-200 bg-rose-50 p-4">
-                <h3 className="font-semibold text-rose-900">Kategori lemah (basis latihan targeted)</h3>
-                <ul className="mt-2 space-y-2 text-sm text-rose-800">
-                  {weakConcepts.length > 0 ? (
-                    weakConcepts.map((concept) => (
-                      <li key={concept} className="flex items-center justify-between gap-2">
-                        <span>{concept}</span>
-                        <button
-                          type="button"
-                          onClick={() => startTargetedDrill(concept)}
-                          className="rounded-md bg-rose-600 px-3 py-1 text-xs font-semibold text-white"
-                        >
-                          Latihan targeted
-                        </button>
-                      </li>
-                    ))
-                  ) : (
-                    <li>Tidak ada konsep kritis. Pertahankan konsistensi dengan mini quiz.</li>
-                  )}
-                </ul>
-              </div>
-
-              <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
-                <h3 className="font-semibold text-emerald-900">Kategori kuat</h3>
-                <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-emerald-800">
-                  {strongConcepts.length > 0 ? (
-                    strongConcepts.map((concept) => <li key={concept}>{concept}</li>)
-                  ) : (
-                    <li>Belum ada konsep yang stabil di level kuat.</li>
-                  )}
-                </ul>
-              </div>
-            </section>
-
-            <section className="rounded-xl border border-indigo-200 bg-indigo-50 p-4">
-              <h3 className="inline-flex items-center gap-2 font-semibold text-indigo-900">
-                <Sparkles size={16} /> Insight strategi mingguan (Prediksi 2026)
-              </h3>
-              <div className="mt-3 grid gap-3 md:grid-cols-2">
-                {weeklyInsight.map((item) => (
-                  <article key={item.id} className="rounded-lg border border-indigo-100 bg-white p-3">
-                    <p className="text-sm font-semibold text-slate-900">{item.title}</p>
-                    <p className="mt-1 text-sm text-slate-600">{item.summary}</p>
-                  </article>
-                ))}
-              </div>
-            </section>
-          </>
-        )}
-      </main>
-    );
-  }
-
-  if (view === 'materials') {
-    return (
-      <main className="mx-auto flex min-h-screen max-w-4xl flex-col gap-6 px-6 py-10">
-        <header className="flex items-center justify-between">
-          <h2 className="text-2xl font-bold text-slate-900">Materi Belajar Rekomendasi</h2>
-          <button
-            type="button"
-            onClick={() => setView('home')}
-            className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-4 py-2 text-slate-700"
-          >
-            <Home size={16} /> Beranda
-          </button>
-        </header>
-
-        <p className="text-slate-600">
-          Materi diambil dari konsep lemah pada report terbaru. Jika belum ada report, sistem menampilkan materi prioritas umum.
-        </p>
-
-        <div className="grid gap-4">
-          {recommendedMaterials.map((material) => (
-            <article key={material.id} className="rounded-xl border border-slate-200 p-4">
-              <p className="text-xs font-semibold uppercase tracking-wide text-indigo-600">
-                {material.category} · Priority {material.priority}
-              </p>
-              <h3 className="mt-1 font-semibold text-slate-900">{material.title}</h3>
-              <p className="mt-1 text-sm text-slate-600">{material.summary}</p>
-              <p className="mt-2 text-xs text-slate-500">{material.scoreImpact}</p>
-            </article>
-          ))}
-        </div>
-      </main>
-    );
-  }
-
-  if (view === 'target') {
-    return (
-      <main className="mx-auto flex min-h-screen max-w-4xl flex-col gap-6 px-6 py-10">
-        <header className="flex items-center justify-between">
-          <h2 className="text-2xl font-bold text-slate-900">Target PTN</h2>
-          <button
-            type="button"
-            onClick={() => setView('home')}
-            className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-4 py-2 text-slate-700"
-          >
-            <Home size={16} /> Beranda
-          </button>
-        </header>
-
-        <div className="grid gap-4 md:grid-cols-2">
-          <label className="space-y-2">
-            <span className="text-sm font-semibold text-slate-700">Pilih PTN</span>
-            <select
-              className="w-full rounded-lg border border-slate-300 p-2"
-              value={selectedPtn?.id ?? ''}
-              onChange={(event) => setSelectedPtnId(event.target.value)}
-            >
-              {PTN_DATA.map((ptn) => (
-                <option key={ptn.id} value={ptn.id}>
-                  {ptn.name} ({ptn.location})
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <label className="space-y-2">
-            <span className="text-sm font-semibold text-slate-700">Pilih Prodi</span>
-            <select
-              className="w-full rounded-lg border border-slate-300 p-2"
-              value={selectedProdi?.id ?? ''}
-              onChange={(event) => setSelectedProdiId(event.target.value)}
-            >
-              {(selectedPtn?.prodi ?? []).map((prodi) => (
-                <option key={prodi.id} value={prodi.id}>
-                  {prodi.name}
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
-
-        {selectedPtn && selectedProdi ? (
-          <section className="rounded-xl border border-slate-200 p-4">
-            <h3 className="font-semibold text-slate-900">
-              {selectedPtn.name} — {selectedProdi.name}
-            </h3>
-            <ul className="mt-2 space-y-1 text-sm text-slate-600">
-              <li>Passing grade estimasi: {selectedProdi.passingGrade}</li>
-              <li>Daya tampung: {selectedProdi.capacity}</li>
-              <li>Peminat tahun lalu: {selectedProdi.applicants}</li>
-            </ul>
-            <p className="mt-3 rounded-lg bg-slate-50 p-3 text-sm text-slate-700">
-              {latestReport
-                ? scoreGap && scoreGap > 0
-                  ? `Skor kamu masih kurang ${scoreGap} poin dari target. Fokuskan latihan targeted ke konsep lemah.`
-                  : 'Skor kamu sudah menyentuh/melewati passing grade target. Jaga konsistensi akurasi.'
-                : 'Belum ada skor terbaru. Ambil quiz cepat dulu untuk mengukur gap terhadap target PTN.'}
+          <Card>
+            <p className="text-slate-700">
+              Total sesi tersimpan: <span className="font-semibold text-slate-900">{progress.reports?.length ?? 0}</span>
             </p>
-          </section>
-        ) : null}
+          </Card>
+        )}
+        <Button
+          type="button"
+          variant="secondary"
+          onClick={() => {
+            setSession(null);
+            setView('home');
+          }}
+          className="w-fit"
+          aria-label="Kembali ke beranda"
+        >
+          <Home size={18} /> Kembali ke beranda
+        </Button>
       </main>
     );
   }
@@ -373,15 +339,15 @@ export default function App() {
   return (
     <main className="mx-auto flex min-h-screen max-w-3xl flex-col gap-6 px-6 py-10">
       <header className="flex items-center justify-between">
-        <h2 className="inline-flex items-center gap-2 text-xl font-bold text-slate-900">
-          <BookOpen size={20} /> Mode Quiz ({session?.mode ?? '-'})
+        <h2 className="inline-flex items-center gap-2 text-xl font-bold text-slate-950">
+          <BookOpen size={20} /> Mode Quiz
         </h2>
         <div className="text-right">
-          <span className="block text-sm text-slate-500">
+          <span className="block text-sm text-slate-700" aria-live="polite">
             {session ? `${session.currentIdx + 1}/${session.questions.length}` : '0/0'}
           </span>
           {activeSubTest && subTestRemainingSec !== null ? (
-            <span className="block text-xs font-semibold text-amber-600">
+            <span className="block text-xs font-semibold text-amber-800">
               {activeSubTest.name}: {subTestRemainingSec}s
             </span>
           ) : null}
@@ -398,36 +364,38 @@ export default function App() {
           />
 
           <div className="flex items-center justify-between gap-3">
-            <button
+            <Button
               type="button"
-              onClick={prevQuestion}
+              variant="secondary"
+              onClick={() => handleQuestionMove('prev')}
               disabled={session.currentIdx === 0}
-              className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-4 py-2 text-slate-700 disabled:opacity-50"
+              aria-label="Pindah ke soal sebelumnya"
             >
               <ChevronLeft size={16} /> Sebelumnya
-            </button>
+            </Button>
 
             {session.currentIdx === session.questions.length - 1 ? (
-              <button
-                type="button"
-                onClick={finishQuiz}
-                className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 font-semibold text-white hover:bg-emerald-700"
-              >
+              <Button type="button" variant="success" onClick={finishQuiz} aria-label="Submit kuis">
                 <CheckCircle2 size={16} /> Submit
-              </button>
+              </Button>
             ) : (
-              <button
-                type="button"
-                onClick={nextQuestion}
-                className="inline-flex items-center gap-1 rounded-lg bg-indigo-600 px-4 py-2 font-semibold text-white hover:bg-indigo-700"
-              >
+              <Button type="button" onClick={() => handleQuestionMove('next')} aria-label="Pindah ke soal berikutnya">
                 Berikutnya <ChevronRight size={16} />
-              </button>
+              </Button>
             )}
           </div>
         </>
       ) : (
-        <p className="text-slate-600">Tidak ada sesi aktif.</p>
+        <StatePanel
+          kind="empty"
+          title="Tidak ada sesi aktif"
+          description="Sesi kuis belum tersedia. Kembali ke beranda untuk memulai sesi baru."
+          action={
+            <Button variant="secondary" onClick={() => setView('home')}>
+              <Home size={16} /> Ke Beranda
+            </Button>
+          }
+        />
       )}
     </main>
   );

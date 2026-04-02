@@ -13,6 +13,7 @@ import type {
 import { calculateSessionReport } from './quiz/analyticsScoring';
 import { loadProgressFromStorage, STORAGE_KEY } from './quiz/progressMigration';
 import { buildSubTestConfig, pickQuestionsByMode } from './quiz/questionSelection';
+import { trackEvent } from '../lib/analytics';
 
 const clamp = (value: number, min: number, max: number): number => Math.min(max, Math.max(min, value));
 const isFiniteNumberAnswer = (answer: QuestionAnswer): answer is number =>
@@ -357,6 +358,7 @@ export function useQuiz() {
 
   const setTarget = useCallback((target: UserTarget) => {
     setProgress((prev) => ({ ...prev, target }));
+    trackEvent('set_target_ptn', { ptn_id: target.ptnId, prodi_id: target.prodiId });
   }, []);
 
   const updateConceptMasteryFromCheckpoint = useCallback((concept: string, scorePercent: number) => {
