@@ -6,78 +6,64 @@
 
 Aplikasi latihan SNBT berbasis **React + Vite** dengan mode quiz, analytics/report, dan penyimpanan progress lokal.
 
-## Development
-
-**Prerequisites:** Node.js 20+
-
-1. Install dependencies
-   ```bash
-   npm install
-   ```
-2. Copy contoh environment
-   ```bash
-   cp .env.example .env.local
-   ```
-3. Jalankan local dev server
-   ```bash
-   npm run dev
-   ```
-
-## Build Production
-
-```bash
-npm run build
-```
-
-## Deploy sebagai website resmi
-
-Panduan publish ke Vercel + custom domain + HTTPS + smoke test tersedia di: **[`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md)**.
-# SNBT Prep Platform — Tryout & Pembelajaran PTN
+## Overview
 
 Platform ini dibuat untuk membantu calon mahasiswa meningkatkan peluang lolos PTN melalui:
 - tryout SNBT terstruktur,
 - evaluasi kelemahan per konsep,
 - dan materi belajar remedial yang terarah.
 
-## Pemilik
+## Setup
 
-Aplikasi ini dikelola sebagai **platform pribadi**.
-
-- **Owner:** Pemilik Pribadi
-- **Kontak:** (isi email/WA bisnis)
-
-## Website Platform
-
-Akses platform langsung di:
-
-- **Live App (saat ini):** https://ai.studio/apps/f06ad6d9-8730-4c50-8173-15da6ae8e787
-- **Domain resmi (setelah deploy):** https://your-domain.com
-
-> Jika domain resmi sudah aktif, ganti link `https://your-domain.com` agar menjadi link utama untuk pengguna.
-
-## Menjalankan Secara Lokal
-
-**Prasyarat:** Node.js 18+
+**Prasyarat minimum toolchain:** **Node.js 20+**.
 
 1. Install dependency:
    ```bash
    npm install
    ```
-2. Jalankan development server:
+2. Salin contoh environment:
+   ```bash
+   cp .env.example .env.local
+   ```
+3. Jalankan development server:
    ```bash
    npm run dev
    ```
-3. Buka URL lokal yang ditampilkan terminal (umumnya `http://localhost:5173`).
+4. Buka URL lokal yang ditampilkan terminal (default: `http://localhost:5000`).
 
-## Build Production
+## Build
 
 ```bash
 npm run build
 npm run preview
 ```
 
-## Tujuan Produk
+## Deploy
 
-- Memaksimalkan kesiapan SNBT lewat latihan berkualitas.
-- Memberikan diagnosis performa yang jelas dan actionable.
-- Meningkatkan kemungkinan lolos PTN impian secara bertahap dan terukur.
+Panduan publish ke Vercel + custom domain + HTTPS + smoke test tersedia di: **[`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md)**.
+
+## Troubleshooting singkat
+
+1. **Build gagal karena conflict merge**
+   - Cek marker conflict:
+     ```bash
+     rg -n '^(<<<<<<<|=======|>>>>>>>)' .
+     ```
+   - Selesaikan semua conflict, lalu jalankan ulang:
+     ```bash
+     npm run build
+     ```
+
+2. **App gagal jalan karena env vars wajib belum diisi**
+   - Pastikan `.env.local` sudah dibuat dari `.env.example`.
+   - Isi minimal variabel wajib berikut:
+     - `GEMINI_API_KEY`
+     - `VITE_APP_BASE_URL`
+     - `VITE_APP_VERSION`
+
+## Owner / Contact
+
+Aplikasi ini dikelola sebagai **platform pribadi**.
+
+- **Owner:** Pemilik Pribadi
+- **Kontak:** isi email/WA bisnis
