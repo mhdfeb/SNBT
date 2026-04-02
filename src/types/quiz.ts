@@ -76,6 +76,25 @@ export interface StudyMaterial {
   sources: { name: string; url: string }[];
 }
 
+export interface QuestionHistoryItem {
+  attempts: number;
+  correct: number;
+  lastSeenAt: number;
+  lastCorrectAt: number;
+  wrongStreak: number;
+}
+
+export interface ConceptProfile {
+  concept: Concept;
+  attempts: number;
+  correct: number;
+  rollingAccuracy: number;
+  confidence: number;
+  recentTrend: 'up' | 'down' | 'stable';
+  weaknessScore: number;
+  lastSeenAt: number;
+}
+
 export interface UserProgress {
   completedIds: string[];
   wrongIds: string[];
@@ -86,6 +105,8 @@ export interface UserProgress {
   reports: AssessmentReport[];
   materialMastery: { [concept: string]: { correct: number; total: number } };
   materialMastery: { [concept: string]: number }; // 0-100 per concept
+  questionHistory: { [questionId: string]: QuestionHistoryItem };
+  conceptProfiles: { [concept: string]: ConceptProfile };
   remedialCycles: RemedialCycle[];
   questionPerformance: { [questionId: string]: QuestionPerformanceStat };
   lastRemedialConcepts?: {
@@ -145,7 +166,7 @@ export interface Prodi {
 }
 
 export interface QuizSession {
-  mode: 'tryout' | 'mini' | 'daily' | 'category';
+  mode: 'tryout' | 'mini' | 'daily' | 'drill15' | 'category';
   selectedCategory?: Category;
   questions: Question[];
   currentIdx: number;
@@ -161,6 +182,14 @@ export interface QuizSession {
     expiresAt: number; // absolute timestamp (ms) when this sub-test timer expires; 0 = not yet started
   }[];
   currentSubTestIdx?: number;
+  recommendation?: {
+    generatedAt: number;
+    mode: 'daily' | 'mini' | 'drill15';
+    weakestConcepts: Concept[];
+    strongestConcepts: Concept[];
+    targetConcepts: Concept[];
+    reasons: string[];
+  };
   remedial?: {
     cycleId: string;
     concept: Concept;

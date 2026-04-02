@@ -312,11 +312,12 @@ export default function App() {
       case 'daily': return 'Latihan Harian';
       case 'tryout': return 'Tryout Full';
       case 'category': return 'Latihan Kategori';
+      case 'drill15': return 'Targeted Drill 15 Menit';
       default: return mode;
     }
   };
 
-  const handleStart = (mode: 'tryout' | 'mini' | 'daily' | 'category', category?: Category) => {
+  const handleStart = (mode: 'tryout' | 'mini' | 'daily' | 'drill15' | 'category', category?: Category) => {
     startSession(mode, category);
     setView('quiz');
   };
@@ -509,6 +510,7 @@ export default function App() {
           {[
             { id: 'mini', title: 'Mini Tryout', desc: '10 Soal campuran untuk latihan cepat 15 menit.', icon: Zap, color: 'bg-amber-500', shadow: 'shadow-amber-200' },
             { id: 'daily', title: 'Latihan Harian', desc: '5 Soal adaptif berdasarkan kelemahanmu.', icon: Target, color: 'bg-indigo-500', shadow: 'shadow-indigo-200' },
+            { id: 'drill15', title: 'Targeted Drill 15 Menit', desc: 'Fokus otomatis ke 2-3 konsep terlemah dengan spaced repetition.', icon: AlertTriangle, color: 'bg-rose-500', shadow: 'shadow-rose-200' },
             { id: 'study', title: 'Belajar Mandiri', desc: 'Pahami konsep materi secara mendalam.', icon: BookOpen, color: 'bg-emerald-500', shadow: 'shadow-emerald-200' },
           ].map((feature) => (
             <motion.button
@@ -531,6 +533,42 @@ export default function App() {
           ))}
         </div>
       </section>
+
+      {session?.recommendation && (
+        <section className="space-y-4">
+          <h2 className="text-2xl font-black text-slate-900 flex items-center gap-3">
+            <div className="bg-emerald-600 w-2 h-8 rounded-full" />
+            Transparansi Rekomendasi Engine
+          </h2>
+          <div className="bg-white border border-slate-200 rounded-3xl p-6 space-y-4 shadow-sm">
+            <p className="text-sm text-slate-600 font-medium">
+              Mode terakhir: <span className="font-black text-slate-900">{getModeName(session.recommendation.mode)}</span>
+            </p>
+            <div className="grid md:grid-cols-3 gap-4">
+              <div className="bg-rose-50 border border-rose-200 rounded-2xl p-4">
+                <p className="text-xs uppercase tracking-widest font-black text-rose-600">Konsep Terlemah</p>
+                <p className="text-sm font-bold text-slate-800 mt-2">{session.recommendation.weakestConcepts.join(', ') || '-'}</p>
+              </div>
+              <div className="bg-indigo-50 border border-indigo-200 rounded-2xl p-4">
+                <p className="text-xs uppercase tracking-widest font-black text-indigo-600">Retensi Konsep Kuat</p>
+                <p className="text-sm font-bold text-slate-800 mt-2">{session.recommendation.strongestConcepts.join(', ') || '-'}</p>
+              </div>
+              <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4">
+                <p className="text-xs uppercase tracking-widest font-black text-amber-600">Target Drill</p>
+                <p className="text-sm font-bold text-slate-800 mt-2">{session.recommendation.targetConcepts.join(', ') || 'N/A di mode ini'}</p>
+              </div>
+            </div>
+            <ul className="space-y-2">
+              {session.recommendation.reasons.map((reason, idx) => (
+                <li key={idx} className="text-sm text-slate-700 font-medium flex gap-2">
+                  <span className="text-emerald-600 font-black">•</span>
+                  <span>{reason}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </section>
+      )}
 
       {/* Category Selection */}
       <section className="space-y-6">
