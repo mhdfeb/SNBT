@@ -40,7 +40,11 @@ export function useQuiz() {
   const [lastDrillResult, setLastDrillResult] = useState<TargetedDrillResult | null>(null);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(progress));
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(progress));
+    } catch (error) {
+      console.error('[storage] Failed to persist progress', error);
+    }
   }, [progress]);
 
   const startSession = useCallback(

@@ -36,13 +36,30 @@ export const markQuestionNavigationLatency = (durationMs: number) => {
 export const recordSessionHealth = (isCrash: boolean) => {
   const key = 'snbt-session-health';
   const fallback = { sessions: 0, crashes: 0 };
-  const raw = localStorage.getItem(key);
-  const current = raw ? (JSON.parse(raw) as typeof fallback) : fallback;
+  let current: typeof fallback = fallback;
+
+  try {
+    const raw = localStorage.getItem(key);
+    if (raw) {
+      const parsed = JSON.parse(raw) as Partial<typeof fallback>;
+      current = {
+        sessions: Number.isFinite(parsed.sessions) ? Number(parsed.sessions) : fallback.sessions,
+        crashes: Number.isFinite(parsed.crashes) ? Number(parsed.crashes) : fallback.crashes,
+      };
+    }
+  } catch (error) {
+    console.error('[slo] Failed to read session health, using fallback', error);
+  }
+
   const next = {
     sessions: current.sessions + 1,
     crashes: current.crashes + (isCrash ? 1 : 0),
   };
-  localStorage.setItem(key, JSON.stringify(next));
+  try {
+    localStorage.setItem(key, JSON.stringify(next));
+  } catch (error) {
+    console.error('[slo] Failed to persist session health', error);
+  }
 
   const crashFreeRate = next.sessions > 0 ? ((next.sessions - next.crashes) / next.sessions) * 100 : 100;
 

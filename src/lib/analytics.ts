@@ -31,8 +31,12 @@ export const initAnalytics = () => {
     return;
   }
 
-  injectGtag(runtimeConfig.analyticsId);
-  initialized = true;
+  try {
+    injectGtag(runtimeConfig.analyticsId);
+    initialized = true;
+  } catch (error) {
+    console.error('[analytics] Failed to initialize analytics', error);
+  }
 };
 
 export const trackPageView = (pagePath: string) => {

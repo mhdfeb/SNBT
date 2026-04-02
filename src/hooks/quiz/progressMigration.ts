@@ -122,14 +122,21 @@ export const loadProgressFromStorage = (): UserProgress => {
   const keys = [STORAGE_KEY, ...LEGACY_STORAGE_KEYS];
 
   for (const key of keys) {
-    const raw = localStorage.getItem(key);
+    let raw: string | null = null;
+    try {
+      raw = localStorage.getItem(key);
+    } catch (error) {
+      console.error('[storage] Failed to read progress from localStorage', error);
+      return createInitialProgress();
+    }
+
     if (!raw) continue;
 
     try {
       const parsed = JSON.parse(raw);
       return migrateProgress(parsed);
-    } catch {
-      // ignore invalid legacy payload
+    } catch (error) {
+      console.error('[storage] Invalid progress payload, ignoring key', key, error);
     }
   }
 
