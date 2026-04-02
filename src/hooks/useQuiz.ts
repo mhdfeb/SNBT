@@ -43,6 +43,14 @@ export function useQuiz() {
               baselineAccuracy: progress.materialMastery?.[options.concept] ?? 0,
             }
           : undefined,
+        remedial:
+          options?.concept && options?.cycleId && options?.remedialPhase
+            ? {
+                cycleId: options.cycleId,
+                concept: options.concept,
+                phase: options.remedialPhase,
+              }
+            : undefined,
       } as QuizSession);
     },
     [progress],
@@ -103,18 +111,95 @@ export function useQuiz() {
     const today = new Date().toISOString().slice(0, 10);
 
     setProgress((prev) => {
+      const nowIso = new Date().toISOString();
       const newCompletedIds = Array.from(new Set([...prev.completedIds, ...session.questions.map((q) => q.id)]));
-      const wrongIds = session.questions
-        .filter((q) => {
-          const answer = session.answers[q.id];
-          if (q.type === 'multiple_choice') return answer !== q.correctAnswer;
-          if (q.type === 'short_answer') return Number(answer) !== Number(q.shortAnswerCorrect);
-          return false;
-        })
-        .map((q) => q.id);
+      const perQuestionResult = session.questions.map((q) => {
+        const answer = session.answers[q.id];
+        const isCorrect =
+          q.type === 'multiple_choice'
+            ? answer === q.correctAnswer
+            : q.type === 'short_answer'
+              ? Number(answer) === Number(q.shortAnswerCorrect)
+              : false;
+        return { questionId: q.id, isCorrect };
+      });
+      const wrongIds = perQuestionResult.filter((item) => !item.isCorrect).map((item) => item.questionId);
 
       const mergedWrong = Array.from(new Set([...prev.wrongIds, ...wrongIds]));
       const nextDifficulty = report.totalScore >= 700 ? 'trap' : report.totalScore >= 550 ? 'medium' : 'easy';
+      const updatedQuestionUsage = perQuestionResult.reduce(
+        (acc, item) => {
+          const current = acc[item.questionId] ?? { shownCount: 0, lastShownAt: null };
+          acc[item.questionId] = {
+            shownCount: (current.shownCount ?? 0) + 1,
+            lastShownAt: nowIso,
+          };
+          return acc;
+        },
+        { ...(prev.questionUsage ?? {}) } as NonNullable<UserProgress['questionUsage']>,
+      );
+      const updatedQuestionPerformance = perQuestionResult.reduce(
+        (acc, item) => {
+          const current = acc[item.questionId] ?? { attempts: 0, wrong: 0 };
+          acc[item.questionId] = {
+            attempts: (current.attempts ?? 0) + 1,
+            wrong: (current.wrong ?? 0) + (item.isCorrect ? 0 : 1),
+          };
+          return acc;
+        },
+        { ...(prev.questionPerformance ?? {}) } as NonNullable<UserProgress['questionPerformance']>,
+      );
+
+      const updatedStrategyOutcomes = (() => {
+        if (!session.strategy) return prev.strategyOutcomes ?? {};
+        const current = prev.strategyOutcomes?.[session.strategy] ?? {
+          attempts: 0,
+          correct: 0,
+          total: 0,
+          avgAccuracy: 0,
+        };
+        const nextAttempts = current.attempts + 1;
+        const nextCorrect = current.correct + (report.correctCount ?? 0);
+        const nextTotal = current.total + session.questions.length;
+
+        return {
+          ...(prev.strategyOutcomes ?? {}),
+          [session.strategy]: {
+            attempts: nextAttempts,
+            correct: nextCorrect,
+            total: nextTotal,
+            avgAccuracy: nextTotal > 0 ? Math.round((nextCorrect / nextTotal) * 100) : 0,
+          },
+        };
+      })();
+
+      const updatedRemedialCycles = (() => {
+        if (session.mode !== 'targeted' || !session.remedial?.cycleId) return prev.remedialCycles ?? [];
+
+        const conceptScore =
+          report.materialMastery?.[session.remedial.concept] ?? prev.materialMastery?.[session.remedial.concept] ?? 0;
+
+        return (prev.remedialCycles ?? []).map((cycle) => {
+          if (cycle.id !== session.remedial?.cycleId) return cycle;
+
+          if (session.remedial.phase === 'baseline') {
+            return {
+              ...cycle,
+              baselineScore: conceptScore,
+              status: 'material_pending' as const,
+            };
+          }
+
+          const baselineScore = cycle.baselineScore ?? conceptScore;
+          const status = (conceptScore >= baselineScore ? 'completed' : 'needs_continue') as const;
+          return {
+            ...cycle,
+            afterScore: conceptScore,
+            completedAt: nowIso,
+            status,
+          };
+        });
+      })();
 
       const updatedProgress: UserProgress = {
         ...prev,
@@ -128,6 +213,10 @@ export function useQuiz() {
             ? [report, ...(prev.simulationReports ?? [])].slice(0, 20)
             : (prev.simulationReports ?? []),
         materialMastery: { ...(prev.materialMastery ?? {}), ...(report.materialMastery ?? {}) },
+        questionUsage: updatedQuestionUsage,
+        questionPerformance: updatedQuestionPerformance,
+        strategyOutcomes: updatedStrategyOutcomes,
+        remedialCycles: updatedRemedialCycles,
         dailyProgress: {
           ...prev.dailyProgress,
           [today]: clamp((prev.dailyProgress?.[today] ?? 0) + (report.correctCount ?? 0), 0, 200),
@@ -225,10 +314,18 @@ export function useQuiz() {
           questionId,
           wrongRate: stat.attempts > 0 ? stat.wrong / stat.attempts : 0,
           attempts: stat.attempts ?? 0,
+          shownCount: progress.questionUsage?.[questionId]?.shownCount ?? 0,
+          lastShownAt: progress.questionUsage?.[questionId]?.lastShownAt ?? null,
         }))
-        .sort((a, b) => b.wrongRate - a.wrongRate || b.attempts - a.attempts)
+        .sort(
+          (a, b) =>
+            b.wrongRate - a.wrongRate ||
+            b.attempts - a.attempts ||
+            b.shownCount - a.shownCount ||
+            (b.lastShownAt ? new Date(b.lastShownAt).getTime() : 0) - (a.lastShownAt ? new Date(a.lastShownAt).getTime() : 0),
+        )
         .slice(0, 20),
-    [progress.questionPerformance],
+    [progress.questionPerformance, progress.questionUsage],
   );
 
   return {
