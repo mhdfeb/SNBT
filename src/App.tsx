@@ -321,11 +321,9 @@ export default function App() {
                 <Button variant="secondary" onClick={() => handleQuestionMove('prev')} disabled={session.currentIdx === 0}><ChevronLeft size={16} /> Sebelumnya</Button>
                 {session.currentIdx === session.questions.length - 1 ? (
                   <Button variant="success" onClick={finishQuiz}><CheckCircle2 size={16} /> Submit</Button>
-                ) : isAtSubTestEnd && hasNextSubTest ? (
-                  <Button onClick={nextSubTest}>Next Section <ChevronRight size={16} /></Button>
                 ) : (
-                  <Button onClick={() => handleQuestionMove('next')}>Berikutnya <ChevronRight size={16} /></Button>
-                )}
+								<Button onClick={() => handleQuestionMove('next')}>Berikutnya <ChevronRight size={16} /></Button>
+)}
               </div>
             </>
           ) : (
