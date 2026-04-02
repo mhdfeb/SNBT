@@ -411,6 +411,9 @@ export default function App() {
   const currentQuestion = session?.questions[session.currentIdx];
   const isLastQuestion = session && session.currentIdx === session.questions.length - 1;
   const currentSubTest = session?.subTests && session.currentSubTestIdx !== undefined ? session.subTests[session.currentSubTestIdx] : null;
+  const totalConcepts = new Set(STUDY_MATERIALS.map((material) => material.concept)).size;
+  const masteredConcepts = Object.keys(progress.materialMastery).length;
+  const masteryPercentage = totalConcepts > 0 ? Math.round((masteredConcepts / totalConcepts) * 100) : 0;
   const now = new Date();
   const recentReports = progress.reports.filter(report => {
     const ageDays = (now.getTime() - new Date(report.date).getTime()) / (1000 * 60 * 60 * 24);
@@ -667,7 +670,7 @@ export default function App() {
         {[
           { label: 'Soal Terjawab', value: progress.completedIds.length, icon: CheckCircle2, color: 'text-emerald-500', bg: 'bg-emerald-50' },
           { label: 'Rata-rata Skor', value: progress.reports.length > 0 ? Math.round(progress.reports.reduce((acc, r) => acc + r.totalScore, 0) / progress.reports.length) : 0, icon: Trophy, color: 'text-amber-500', bg: 'bg-amber-50' },
-          { label: 'Materi Dikuasai', value: `${Math.round((Object.keys(progress.materialMastery).length / 20) * 100)}%`, icon: GraduationCap, color: 'text-indigo-500', bg: 'bg-indigo-50' },
+          { label: 'Materi Dikuasai', value: `${masteryPercentage}%`, tooltip: `${masteredConcepts} dari ${totalConcepts} konsep`, icon: GraduationCap, color: 'text-indigo-500', bg: 'bg-indigo-50' },
           { label: 'Peringkat Nasional', value: progress.reports.length > 0 ? `#${progress.reports[0].nationalRank}` : '-', icon: Award, color: 'text-violet-500', bg: 'bg-violet-50' },
         ].map((stat, idx) => (
           <div key={idx} className="ui-card ui-card-hover p-6 rounded-3xl space-y-3">
@@ -677,6 +680,7 @@ export default function App() {
             <div>
               <p className="text-[10px] text-slate-400 uppercase font-black tracking-widest">{stat.label}</p>
               <p className="text-xl font-black text-slate-900">{stat.value}</p>
+              {stat.tooltip && <p className="text-xs text-slate-500 mt-1">{stat.tooltip}</p>}
             </div>
           </div>
         ))}
