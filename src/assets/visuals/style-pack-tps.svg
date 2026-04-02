@@ -1,0 +1,24 @@
+<svg width="640" height="360" viewBox="0 0 640 360" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="tpsTitle tpsDesc">
+  <title id="tpsTitle">Diagram alur TPS</title>
+  <desc id="tpsDesc">Visual langkah berpikir TPS dari identifikasi pola, eliminasi opsi, hingga verifikasi jawaban.</desc>
+  <rect width="640" height="360" rx="28" fill="#EEF2FF"/>
+  <rect x="40" y="56" width="180" height="92" rx="18" fill="#DBEAFE"/>
+  <rect x="230" y="56" width="180" height="92" rx="18" fill="#E0E7FF"/>
+  <rect x="420" y="56" width="180" height="92" rx="18" fill="#DDD6FE"/>
+  <rect x="136" y="188" width="368" height="124" rx="18" fill="#1E1B4B"/>
+  <path d="M220 102H230" stroke="#6366F1" stroke-width="6" stroke-linecap="round"/>
+  <path d="M410 102H420" stroke="#6366F1" stroke-width="6" stroke-linecap="round"/>
+  <circle cx="82" cy="102" r="18" fill="#2563EB"/>
+  <circle cx="272" cy="102" r="18" fill="#4F46E5"/>
+  <circle cx="462" cy="102" r="18" fill="#7C3AED"/>
+  <text x="106" y="98" fill="#1E3A8A" font-size="18" font-family="Inter, Arial" font-weight="700">Pola</text>
+  <text x="106" y="120" fill="#1E3A8A" font-size="14" font-family="Inter, Arial">Temukan relasi inti</text>
+  <text x="296" y="98" fill="#312E81" font-size="18" font-family="Inter, Arial" font-weight="700">Eliminasi</text>
+  <text x="296" y="120" fill="#312E81" font-size="14" font-family="Inter, Arial">Saring opsi cepat</text>
+  <text x="486" y="98" fill="#4C1D95" font-size="18" font-family="Inter, Arial" font-weight="700">Validasi</text>
+  <text x="486" y="120" fill="#4C1D95" font-size="14" font-family="Inter, Arial">Cek jebakan logika</text>
+  <text x="168" y="224" fill="#C7D2FE" font-size="15" font-family="Inter, Arial" font-weight="700">Mini Cheat-Sheet TPS</text>
+  <text x="168" y="250" fill="#E2E8F0" font-size="14" font-family="Inter, Arial">• Tulis kata kunci soal dalam 5 detik.</text>
+  <text x="168" y="272" fill="#E2E8F0" font-size="14" font-family="Inter, Arial">• Hapus 2 opsi yang kontradiktif dulu.</text>
+  <text x="168" y="294" fill="#E2E8F0" font-size="14" font-family="Inter, Arial">• Sisakan 1 opsi paling konsisten.</text>
+</svg>
