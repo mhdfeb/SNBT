@@ -1,6 +1,6 @@
-import { Question } from '../../types/quiz';
+import { QuestionBankItem } from '../../types/quiz';
 
-export const LITERASI_ID_QUESTIONS: Question[] = [
+export const LITERASI_ID_QUESTIONS: QuestionBankItem[] = [
   // --- Literasi Bahasa Indonesia ---
   {
     id: 'lit-id-1',

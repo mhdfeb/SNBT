@@ -1,6 +1,6 @@
-import { Question } from '../../types/quiz';
+import { QuestionBankItem } from '../../types/quiz';
 
-export const MATEMATIKA_QUESTIONS: Question[] = [
+export const MATEMATIKA_QUESTIONS: QuestionBankItem[] = [
   // --- Penalaran Matematika ---
   {
     id: 'pm-1',

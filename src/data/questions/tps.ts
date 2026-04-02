@@ -1,6 +1,6 @@
-import { Question } from '../../types/quiz';
+import { QuestionBankItem } from '../../types/quiz';
 
-export const TPS_QUESTIONS: Question[] = [
+export const TPS_QUESTIONS: QuestionBankItem[] = [
   // --- TPS: Penalaran Induktif ---
   {
     id: 'pi-1',

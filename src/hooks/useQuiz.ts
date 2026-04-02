@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Question, UserProgress, QuizSession, Difficulty, Category, AssessmentReport } from '../types/quiz';
+import { Question, UserProgress, QuizSession, Difficulty, Category, AssessmentReport, ItemPerformance } from '../types/quiz';
 import { QUESTIONS } from '../data/questions';
 import { calculateIRTScore, getNationalStats } from '../lib/irt';
 import { PTN_DATA } from '../data/ptn';
@@ -20,6 +20,7 @@ const INITIAL_PROGRESS: UserProgress = {
   currentDifficulty: 'easy',
   reports: [],
   materialMastery: {},
+  itemPerformance: {},
 };
 
 const SUB_TEST_CONFIGS = [
@@ -34,12 +35,57 @@ const SUB_TEST_CONFIGS = [
   { name: 'Penalaran Matematika', category: 'Penalaran Matematika', count: 20, time: 1800 },
 ];
 
+const ACTIVE_QUESTIONS = QUESTIONS.filter((q) => q.qualityMetadata.lifecycleStatus === 'active');
+
+const createEmptyPerformance = (question: Question): ItemPerformance => ({
+  attempts: 0,
+  correct: 0,
+  pValue: 0,
+  highGroupAttempts: 0,
+  highGroupCorrect: 0,
+  lowGroupAttempts: 0,
+  lowGroupCorrect: 0,
+  discriminationProxy: 0,
+  distractorStats: question.options?.map((_, optionIndex) => ({
+    optionIndex,
+    selectedCount: 0,
+    selectedByIncorrect: 0,
+    selectedByCorrect: 0,
+  })) ?? [],
+  distractorEffectiveness: 1,
+  flaggedIssue: [],
+  isExcludedFromAdaptive: false,
+  lastUpdatedAt: new Date().toISOString(),
+});
+
+const evaluatePerformanceFlag = (performance: ItemPerformance): { flaggedIssue: string[]; isExcludedFromAdaptive: boolean } => {
+  if (performance.attempts < 20) {
+    return { flaggedIssue: [], isExcludedFromAdaptive: false };
+  }
+
+  const flaggedIssue: string[] = [];
+  if (performance.pValue < 0.2) flaggedIssue.push('too_difficult');
+  if (performance.pValue > 0.9) flaggedIssue.push('too_easy');
+  if (performance.discriminationProxy < 0.15) flaggedIssue.push('low_discrimination');
+  if (performance.distractorEffectiveness < 0.5) flaggedIssue.push('weak_distractor');
+
+  return {
+    flaggedIssue,
+    isExcludedFromAdaptive: flaggedIssue.length > 0,
+  };
+};
+
 export function useQuiz() {
   const [progress, setProgress] = useState<UserProgress>(() => {
     const saved = localStorage.getItem(STORAGE_KEY);
     if (saved) {
       const parsed = JSON.parse(saved);
-      return { ...INITIAL_PROGRESS, ...parsed, materialMastery: parsed.materialMastery ?? {} };
+      return {
+        ...INITIAL_PROGRESS,
+        ...parsed,
+        materialMastery: parsed.materialMastery ?? {},
+        itemPerformance: parsed.itemPerformance ?? {},
+      };
     }
     return INITIAL_PROGRESS;
   });
@@ -101,7 +147,7 @@ export function useQuiz() {
 
       SUB_TEST_CONFIGS.forEach(config => {
         // Filter questions by concept or category, excluding already used ones
-        const subPool = QUESTIONS.filter(q => 
+        const subPool = ACTIVE_QUESTIONS.filter(q => 
           !usedIds.has(q.id) && 
           (q.concept === config.name || (q.category === config.category && q.concept.includes(config.name)))
         );
@@ -109,22 +155,22 @@ export function useQuiz() {
         // If pool is too small, fallback to category pool (excluding used)
         let finalPool = subPool;
         if (finalPool.length < config.count) {
-          const catPool = QUESTIONS.filter(q => !usedIds.has(q.id) && q.category === config.category);
+          const catPool = ACTIVE_QUESTIONS.filter(q => !usedIds.has(q.id) && q.category === config.category);
           finalPool = [...finalPool, ...catPool.filter(q => !finalPool.some(fq => fq.id === q.id))];
         }
 
         // If still too small, fallback to any questions (even used) to prevent empty sub-tests
         if (finalPool.length < config.count) {
           const remainingNeeded = config.count - finalPool.length;
-          const otherPool = QUESTIONS.filter(q => !finalPool.some(fq => fq.id === q.id));
+          const otherPool = ACTIVE_QUESTIONS.filter(q => !finalPool.some(fq => fq.id === q.id));
           // Shuffle otherPool and take what's needed
           const additional = [...otherPool].sort(() => Math.random() - 0.5).slice(0, remainingNeeded);
           finalPool = [...finalPool, ...additional];
         }
 
         // Final safety check: if still empty (should only happen if QUESTIONS is empty), skip or fill with anything
-        if (finalPool.length === 0 && QUESTIONS.length > 0) {
-          finalPool = [QUESTIONS[Math.floor(Math.random() * QUESTIONS.length)]];
+        if (finalPool.length === 0 && ACTIVE_QUESTIONS.length > 0) {
+          finalPool = [ACTIVE_QUESTIONS[Math.floor(Math.random() * ACTIVE_QUESTIONS.length)]];
         }
         
         const shuffled = [...finalPool].sort(() => Math.random() - 0.5).slice(0, config.count);
@@ -143,9 +189,13 @@ export function useQuiz() {
         }
       });
     } else {
-      const pool = category 
-        ? QUESTIONS.filter(q => q.category === category)
-        : [...QUESTIONS];
+      const basePool = category
+        ? ACTIVE_QUESTIONS.filter(q => q.category === category)
+        : [...ACTIVE_QUESTIONS];
+      const adaptivePool = (mode === 'daily' || mode === 'mini')
+        ? basePool.filter((q) => !progress.itemPerformance[q.id]?.isExcludedFromAdaptive)
+        : basePool;
+      const pool = adaptivePool.length > 0 ? adaptivePool : basePool;
 
       const wrongPool = pool.filter(q => progress.wrongIds.includes(q.id));
       const normalPool = pool.filter(q => !progress.wrongIds.includes(q.id));
@@ -268,8 +318,10 @@ export function useQuiz() {
     const results = session.questions.map(q => ({
       id: q.id,
       correct: validateAnswer(q, session.answers[q.id]),
+      userAnswer: session.answers[q.id],
       category: q.category,
       concept: q.concept,
+      question: q,
       irtParams: q.irtParams,
     }));
 
@@ -363,6 +415,8 @@ export function useQuiz() {
 
       let newDifficulty = prev.currentDifficulty;
       const accuracy = correctCount / (session.questions.length || 1);
+      const isHighGroup = accuracy >= 0.7;
+      const isLowGroup = accuracy <= 0.4;
       if (accuracy > 0.8) {
         if (newDifficulty === 'easy') newDifficulty = 'medium';
         else if (newDifficulty === 'medium') newDifficulty = 'trap';
@@ -370,6 +424,52 @@ export function useQuiz() {
         if (newDifficulty === 'trap') newDifficulty = 'medium';
         else if (newDifficulty === 'medium') newDifficulty = 'easy';
       }
+
+      const updatedItemPerformance = { ...prev.itemPerformance };
+      results.forEach((result) => {
+        const existing = updatedItemPerformance[result.id] ?? createEmptyPerformance(result.question);
+        const next: ItemPerformance = {
+          ...existing,
+          attempts: existing.attempts + 1,
+          correct: existing.correct + (result.correct ? 1 : 0),
+          highGroupAttempts: existing.highGroupAttempts + (isHighGroup ? 1 : 0),
+          highGroupCorrect: existing.highGroupCorrect + (isHighGroup && result.correct ? 1 : 0),
+          lowGroupAttempts: existing.lowGroupAttempts + (isLowGroup ? 1 : 0),
+          lowGroupCorrect: existing.lowGroupCorrect + (isLowGroup && result.correct ? 1 : 0),
+          lastUpdatedAt: new Date().toISOString(),
+        };
+
+        if (result.question.type === 'multiple_choice' && typeof result.userAnswer === 'number' && next.distractorStats.length > 0) {
+          next.distractorStats = next.distractorStats.map((stat) => {
+            if (stat.optionIndex !== result.userAnswer) return stat;
+            return {
+              ...stat,
+              selectedCount: stat.selectedCount + 1,
+              selectedByCorrect: stat.selectedByCorrect + (result.correct ? 1 : 0),
+              selectedByIncorrect: stat.selectedByIncorrect + (result.correct ? 0 : 1),
+            };
+          });
+        }
+
+        next.pValue = next.correct / (next.attempts || 1);
+        const highRate = next.highGroupCorrect / (next.highGroupAttempts || 1);
+        const lowRate = next.lowGroupCorrect / (next.lowGroupAttempts || 1);
+        next.discriminationProxy = highRate - lowRate;
+        if (next.distractorStats.length > 0) {
+          const plausibleDistractors = next.distractorStats.filter((stat, index) => {
+            if (index === result.question.correctAnswer) return false;
+            return stat.selectedByIncorrect > 0;
+          });
+          const denominator = Math.max(1, next.distractorStats.length - 1);
+          next.distractorEffectiveness = plausibleDistractors.length / denominator;
+        }
+
+        const flagEvaluation = evaluatePerformanceFlag(next);
+        next.flaggedIssue = flagEvaluation.flaggedIssue;
+        next.isExcludedFromAdaptive = flagEvaluation.isExcludedFromAdaptive;
+
+        updatedItemPerformance[result.id] = next;
+      });
 
       return {
         ...prev,
@@ -383,6 +483,7 @@ export function useQuiz() {
         categoryStats: updatedStats,
         currentDifficulty: newDifficulty,
         materialMastery: { ...(prev.materialMastery ?? {}), ...materialMastery },
+        itemPerformance: updatedItemPerformance,
         reports: [report, ...prev.reports].slice(0, 10),
       };
     });

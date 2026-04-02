@@ -1,6 +1,6 @@
-import { Question } from '../../types/quiz';
+import { QuestionBankItem } from '../../types/quiz';
 
-export const SNBT2025_QUESTIONS: Question[] = [
+export const SNBT2025_QUESTIONS: QuestionBankItem[] = [
   {
     id: 'snbt25-1',
     category: 'TPS',

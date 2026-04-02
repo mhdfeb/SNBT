@@ -8,10 +8,20 @@ export type Concept =
   | 'Literasi Teks' | 'Main Idea' | 'Inference' | 'Vocabulary' | 'Bilangan' | 'Aljabar' | 'Geometri' | 'Data';
 
 export type QuestionType = 'multiple_choice' | 'complex_multiple_choice' | 'short_answer';
+export type CognitiveLevel = 'remember' | 'understand' | 'apply' | 'analyze' | 'evaluate' | 'create';
+export type ItemLifecycleStatus = 'draft' | 'reviewed' | 'active' | 'deprecated';
 
 export interface ComplexOption {
   statement: string;
   correct: boolean; // True for Benar/Ya, False for Salah/Tidak
+}
+
+export interface QuestionQualityMetadata {
+  subtopic: string;
+  cognitiveLevel: CognitiveLevel;
+  targetDifficulty: Difficulty;
+  competencyGoal: string;
+  lifecycleStatus: ItemLifecycleStatus;
 }
 
 export interface Question {
@@ -19,6 +29,7 @@ export interface Question {
   category: Category;
   concept: Concept;
   difficulty: Difficulty;
+  qualityMetadata: QuestionQualityMetadata;
   type: QuestionType;
   question: string;
   options?: string[]; // For multiple_choice
@@ -31,6 +42,31 @@ export interface Question {
     discrimination: number; // a parameter (0 to 2)
     guessing: number; // c parameter (0 to 0.25)
   };
+}
+
+export type QuestionBankItem = Omit<Question, 'qualityMetadata'>;
+
+export interface DistractorOptionPerformance {
+  optionIndex: number;
+  selectedCount: number;
+  selectedByIncorrect: number;
+  selectedByCorrect: number;
+}
+
+export interface ItemPerformance {
+  attempts: number;
+  correct: number;
+  pValue: number;
+  highGroupAttempts: number;
+  highGroupCorrect: number;
+  lowGroupAttempts: number;
+  lowGroupCorrect: number;
+  discriminationProxy: number;
+  distractorStats: DistractorOptionPerformance[];
+  distractorEffectiveness: number;
+  flaggedIssue: string[];
+  isExcludedFromAdaptive: boolean;
+  lastUpdatedAt: string;
 }
 
 export interface StudyMaterial {
@@ -52,6 +88,7 @@ export interface UserProgress {
   currentDifficulty: Difficulty;
   reports: AssessmentReport[];
   materialMastery: { [concept: string]: number }; // 0-100 per concept
+  itemPerformance: Record<string, ItemPerformance>;
 }
 
 export interface AssessmentReport {

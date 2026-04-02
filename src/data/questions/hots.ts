@@ -1,6 +1,6 @@
-import { Question } from '../../types/quiz';
+import { QuestionBankItem } from '../../types/quiz';
 
-export const HOTS_QUESTIONS: Question[] = [
+export const HOTS_QUESTIONS: QuestionBankItem[] = [
   // --- HOTS: Penalaran Induktif ---
   {
     id: 'pi-hots-1',
