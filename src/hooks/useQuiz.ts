@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Question, UserProgress, QuizSession, Difficulty, Category, AssessmentReport } from '../types/quiz';
+import { Question, UserProgress, QuizSession, Difficulty, Category, AssessmentReport, QuizStrategy, SessionRecommendation } from '../types/quiz';
 import { QUESTIONS } from '../data/questions';
 import { calculateIRTScore, getNationalStats } from '../lib/irt';
 import { PTN_DATA } from '../data/ptn';
@@ -20,6 +20,9 @@ const INITIAL_PROGRESS: UserProgress = {
   currentDifficulty: 'easy',
   reports: [],
   materialMastery: {},
+  conceptHistory: {},
+  conceptReviewState: {},
+  strategyOutcomes: {},
 };
 
 const SUB_TEST_CONFIGS = [
@@ -35,6 +38,71 @@ const SUB_TEST_CONFIGS = [
 ];
 
 export function useQuiz() {
+  const calculateConceptWeakness = useCallback((concept: string, progressState: UserProgress) => {
+    const mastery = progressState.materialMastery?.[concept] ?? 50;
+    const history = progressState.conceptHistory?.[concept] ?? [];
+    const recent = history.slice(-2);
+    const declinePenalty = recent.length === 2 && recent.every(v => !v) ? 25 : recent.length > 0 && !recent[recent.length - 1] ? 12 : 0;
+    const weakness = Math.max(0, 100 - mastery) + declinePenalty;
+    return Math.min(120, weakness);
+  }, []);
+
+  const getReviewUrgency = useCallback((concept: string, progressState: UserProgress) => {
+    const review = progressState.conceptReviewState?.[concept];
+    if (!review) return 0.2;
+    const now = Date.now();
+    const dueTime = new Date(review.nextReviewAt).getTime();
+    if (Number.isNaN(dueTime)) return 0.2;
+    if (dueTime <= now) {
+      const overdueDays = Math.max(0, (now - dueTime) / (1000 * 60 * 60 * 24));
+      return 1 + Math.min(1.2, overdueDays * 0.25);
+    }
+    const daysUntilDue = (dueTime - now) / (1000 * 60 * 60 * 24);
+    return Math.max(0.1, 1 - Math.min(0.9, daysUntilDue / 7));
+  }, []);
+
+  const getDailyStrategy = useCallback((pool: Question[], progressState: UserProgress): QuizStrategy => {
+    const weakRatio = pool.length === 0
+      ? 0
+      : pool.filter(q => calculateConceptWeakness(q.concept, progressState) >= 55).length / pool.length;
+    const hasOverdueReview = pool.some(q => getReviewUrgency(q.concept, progressState) >= 1);
+    const latestReport = progressState.reports[0];
+    const latestScore = latestReport?.totalScore ?? 0;
+
+    if (weakRatio >= 0.4) return 'remediation';
+    if (hasOverdueReview) return 'retention';
+    if (latestScore >= 650) return 'exam_simulation';
+    return 'retention';
+  }, [calculateConceptWeakness, getReviewUrgency]);
+
+  const getStrategyWeight = useCallback((question: Question, strategy: QuizStrategy, progressState: UserProgress) => {
+    const weakness = calculateConceptWeakness(question.concept, progressState);
+    const urgency = getReviewUrgency(question.concept, progressState);
+    const wrongBoost = progressState.wrongIds.includes(question.id) ? 1.1 : 0;
+    const difficultyBoost = strategy === 'exam_simulation'
+      ? question.difficulty === 'trap' ? 0.8 : question.difficulty === 'medium' ? 0.45 : 0.2
+      : question.difficulty === progressState.currentDifficulty ? 0.35 : 0.1;
+
+    if (strategy === 'remediation') return weakness * 1.35 + urgency * 12 + wrongBoost + difficultyBoost;
+    if (strategy === 'retention') return urgency * 30 + weakness * 0.45 + wrongBoost + difficultyBoost;
+    return weakness * 0.35 + urgency * 8 + difficultyBoost + (question.category === 'TPS' ? 0.25 : 0);
+  }, [calculateConceptWeakness, getReviewUrgency]);
+
+  const buildReason = useCallback((question: Question, strategy: QuizStrategy, progressState: UserProgress) => {
+    const history = progressState.conceptHistory?.[question.concept] ?? [];
+    const last2 = history.slice(-2);
+    if (strategy === 'remediation' && last2.length === 2 && last2.every(v => !v)) {
+      return `Dipilih karena akurasi konsep ${question.concept} menurun 2 sesi terakhir.`;
+    }
+    if (strategy === 'retention' && getReviewUrgency(question.concept, progressState) >= 1) {
+      return `Dipilih karena jadwal review konsep ${question.concept} sudah jatuh tempo.`;
+    }
+    if (strategy === 'exam_simulation') {
+      return `Dipilih untuk simulasi ujian dengan tingkat kesulitan ${question.difficulty}.`;
+    }
+    return `Dipilih untuk menjaga variasi paparan konsep ${question.concept}.`;
+  }, [getReviewUrgency]);
+
   const [progress, setProgress] = useState<UserProgress>(() => {
     const saved = localStorage.getItem(STORAGE_KEY);
     if (saved) {
@@ -93,6 +161,8 @@ export function useQuiz() {
   const startSession = useCallback((mode: QuizSession['mode'], category?: Category) => {
     let selectedQuestions: Question[] = [];
     let subTests: QuizSession['subTests'] = [];
+    let recommendations: QuizSession['recommendations'] = {};
+    let strategy: QuizSession['strategy'] = undefined;
 
     if (mode === 'tryout') {
       // Full Tryout: All sub-tests
@@ -146,20 +216,53 @@ export function useQuiz() {
       const pool = category 
         ? QUESTIONS.filter(q => q.category === category)
         : [...QUESTIONS];
-
-      const wrongPool = pool.filter(q => progress.wrongIds.includes(q.id));
-      const normalPool = pool.filter(q => !progress.wrongIds.includes(q.id));
+      strategy = mode === 'daily' ? getDailyStrategy(pool, progress) : mode === 'mini' ? 'exam_simulation' : undefined;
 
       if (mode === 'daily') {
-        selectedQuestions = [
-          ...wrongPool.sort(() => Math.random() - 0.5).slice(0, 2),
-          ...normalPool.filter(q => q.difficulty === progress.currentDifficulty).sort(() => Math.random() - 0.5).slice(0, 3)
-        ];
+        const scored = pool
+          .map(q => ({
+            question: q,
+            score: getStrategyWeight(q, strategy!, progress),
+          }))
+          .sort((a, b) => b.score - a.score);
+
+        const priorityCount = 4;
+        const explorationCount = 1;
+        const priority = scored.slice(0, priorityCount);
+        const nonPriorityPool = scored.slice(priorityCount);
+        const exploration = nonPriorityPool
+          .sort(() => Math.random() - 0.5)
+          .slice(0, explorationCount);
+
+        const combined = [...priority, ...exploration].sort(() => Math.random() - 0.5).slice(0, 5);
+        selectedQuestions = combined.map(item => item.question);
+        recommendations = combined.reduce((acc, item) => {
+          acc[item.question.id] = {
+            strategy: strategy!,
+            reason: buildReason(item.question, strategy!, progress),
+            weight: Number(item.score.toFixed(2)),
+          };
+          return acc;
+        }, {} as Record<string, SessionRecommendation>);
       } else if (mode === 'mini') {
-        selectedQuestions = [
-          ...wrongPool.sort(() => Math.random() - 0.5).slice(0, 3),
-          ...normalPool.filter(q => q.difficulty === progress.currentDifficulty).sort(() => Math.random() - 0.5).slice(0, 7)
-        ];
+        const scored = pool
+          .map(q => ({
+            question: q,
+            score: getStrategyWeight(q, strategy!, progress),
+          }))
+          .sort((a, b) => b.score - a.score);
+        const prioritized = scored.slice(0, 8);
+        const exploration = scored.slice(8).sort(() => Math.random() - 0.5).slice(0, 2);
+        const combined = [...prioritized, ...exploration].sort(() => Math.random() - 0.5).slice(0, 10);
+        selectedQuestions = combined.map(item => item.question);
+        recommendations = combined.reduce((acc, item) => {
+          acc[item.question.id] = {
+            strategy: strategy!,
+            reason: buildReason(item.question, strategy!, progress),
+            weight: Number(item.score.toFixed(2)),
+          };
+          return acc;
+        }, {} as Record<string, SessionRecommendation>);
       } else {
         selectedQuestions = pool.sort(() => Math.random() - 0.5).slice(0, 10);
       }
@@ -177,13 +280,15 @@ export function useQuiz() {
       currentIdx: 0,
       answers: {},
       marked: {},
+      recommendations,
+      strategy,
       startTime: Date.now(),
       timePerQuestion: {},
       isSubmitted: false,
       subTests: mode === 'tryout' ? finalSubTests : undefined,
       currentSubTestIdx: mode === 'tryout' ? 0 : undefined,
     });
-  }, [progress]);
+  }, [progress, buildReason, getDailyStrategy, getStrategyWeight]);
 
   const toggleMark = () => {
     if (!session || session.isSubmitted) return;
@@ -348,9 +453,34 @@ export function useQuiz() {
       const newWrongIds = [...prev.wrongIds];
       const newCompletedIds = [...prev.completedIds];
       const updatedStats = { ...prev.categoryStats };
+      const updatedConceptHistory = { ...(prev.conceptHistory ?? {}) };
+      const updatedReviewState = { ...(prev.conceptReviewState ?? {}) };
 
       results.forEach(r => {
         updatedStats[r.category].total += 1;
+        const conceptHistory = [...(updatedConceptHistory[r.concept] ?? [])];
+        conceptHistory.push(r.correct);
+        updatedConceptHistory[r.concept] = conceptHistory.slice(-10);
+
+        const prevReview = updatedReviewState[r.concept] ?? {
+          intervalDays: 1,
+          easeFactor: 2.5,
+        };
+        const newEase = r.correct
+          ? Math.min(2.8, prevReview.easeFactor + 0.1)
+          : Math.max(1.3, prevReview.easeFactor - 0.2);
+        const newInterval = r.correct
+          ? Math.max(1, Math.round(prevReview.intervalDays * newEase))
+          : 1;
+        const nextReviewDate = new Date();
+        nextReviewDate.setDate(nextReviewDate.getDate() + newInterval);
+        updatedReviewState[r.concept] = {
+          nextReviewAt: nextReviewDate.toISOString(),
+          intervalDays: newInterval,
+          easeFactor: newEase,
+          lastReviewedAt: new Date().toISOString(),
+        };
+
         if (r.correct) {
           updatedStats[r.category].correct += 1;
           const idx = newWrongIds.indexOf(r.id);
@@ -371,8 +501,18 @@ export function useQuiz() {
         else if (newDifficulty === 'medium') newDifficulty = 'easy';
       }
 
+      const currentStrategy = session.strategy;
+      const previousOutcome = currentStrategy ? prev.strategyOutcomes?.[currentStrategy] : undefined;
+      const strategyCorrect = correctCount;
+      const strategyTotal = session.questions.length;
+      const nextAttempts = (previousOutcome?.attempts ?? 0) + 1;
+      const cumulativeCorrect = (previousOutcome?.correct ?? 0) + strategyCorrect;
+      const cumulativeTotal = (previousOutcome?.total ?? 0) + strategyTotal;
+
       return {
         ...prev,
+        conceptHistory: updatedConceptHistory,
+        conceptReviewState: updatedReviewState,
         completedIds: newCompletedIds,
         wrongIds: newWrongIds,
         streak: correctCount === session.questions.length ? prev.streak + 1 : 0,
@@ -384,6 +524,17 @@ export function useQuiz() {
         currentDifficulty: newDifficulty,
         materialMastery: { ...(prev.materialMastery ?? {}), ...materialMastery },
         reports: [report, ...prev.reports].slice(0, 10),
+        strategyOutcomes: currentStrategy
+          ? {
+              ...(prev.strategyOutcomes ?? {}),
+              [currentStrategy]: {
+                attempts: nextAttempts,
+                correct: cumulativeCorrect,
+                total: cumulativeTotal,
+                avgAccuracy: Number(((cumulativeCorrect / (cumulativeTotal || 1)) * 100).toFixed(2)),
+              },
+            }
+          : prev.strategyOutcomes,
       };
     });
 

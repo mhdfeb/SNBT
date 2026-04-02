@@ -317,6 +317,7 @@ export default function App() {
   const currentQuestion = session?.questions[session.currentIdx];
   const isLastQuestion = session && session.currentIdx === session.questions.length - 1;
   const currentSubTest = session?.subTests && session.currentSubTestIdx !== undefined ? session.subTests[session.currentSubTestIdx] : null;
+  const currentRecommendation = session && currentQuestion ? session.recommendations?.[currentQuestion.id] : null;
 
   // --- Views ---
 
@@ -408,6 +409,21 @@ export default function App() {
           </div>
         ))}
       </div>
+
+      {progress.strategyOutcomes && Object.keys(progress.strategyOutcomes).length > 0 && (
+        <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
+          <p className="text-[10px] text-slate-400 uppercase font-black tracking-widest mb-4">Efektivitas Strategy Selector</p>
+          <div className="grid md:grid-cols-3 gap-4">
+            {Object.entries(progress.strategyOutcomes).map(([strategy, outcome]) => (
+              <div key={strategy} className="bg-slate-50 rounded-2xl p-4 border border-slate-200">
+                <p className="text-xs font-black uppercase text-slate-500">{strategy.replace('_', ' ')}</p>
+                <p className="text-2xl font-black text-slate-900 mt-1">{outcome?.avgAccuracy ?? 0}%</p>
+                <p className="text-xs text-slate-500 mt-1">Akurasi rata-rata dari {outcome?.attempts ?? 0} sesi.</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Main Features */}
       <section className="space-y-6">
@@ -640,6 +656,12 @@ export default function App() {
           {/* Main Question Area */}
           <div className="flex flex-col bg-white border-r border-slate-200">
             <div className="flex-1 p-8 md:p-12 space-y-10 overflow-y-auto">
+              {currentRecommendation && (
+                <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4">
+                  <p className="text-[10px] text-amber-700 font-black uppercase tracking-widest">Alasan Rekomendasi ({currentRecommendation.strategy.replace('_', ' ')})</p>
+                  <p className="text-sm font-semibold text-amber-900 mt-1">{currentRecommendation.reason}</p>
+                </div>
+              )}
               <AnimatePresence mode="wait">
                 <QuestionArea 
                   key={currentQuestion.id}

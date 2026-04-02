@@ -52,6 +52,31 @@ export interface UserProgress {
   currentDifficulty: Difficulty;
   reports: AssessmentReport[];
   materialMastery: { [concept: string]: number }; // 0-100 per concept
+  conceptHistory?: { [concept: string]: boolean[] };
+  conceptReviewState?: {
+    [concept: string]: {
+      nextReviewAt: string;
+      intervalDays: number;
+      easeFactor: number;
+      lastReviewedAt: string;
+    };
+  };
+  strategyOutcomes?: {
+    [key in QuizStrategy]?: {
+      attempts: number;
+      correct: number;
+      total: number;
+      avgAccuracy: number;
+    };
+  };
+}
+
+export type QuizStrategy = 'remediation' | 'retention' | 'exam_simulation';
+
+export interface SessionRecommendation {
+  strategy: QuizStrategy;
+  reason: string;
+  weight: number;
 }
 
 export interface AssessmentReport {
@@ -90,6 +115,8 @@ export interface QuizSession {
   mode: 'tryout' | 'mini' | 'daily' | 'category';
   selectedCategory?: Category;
   questions: Question[];
+  recommendations?: { [questionId: string]: SessionRecommendation };
+  strategy?: QuizStrategy;
   currentIdx: number;
   answers: { [questionId: string]: any }; // number for MC, boolean[] for Complex, number for Short
   marked: { [questionId: string]: boolean }; // "Ragu-ragu" state
