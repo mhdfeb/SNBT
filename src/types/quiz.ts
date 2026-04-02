@@ -31,6 +31,29 @@ export interface Question {
     discrimination: number; // a parameter (0 to 2)
     guessing: number; // c parameter (0 to 0.25)
   };
+  editorial?: EditorialMetadata;
+}
+
+export interface EditorialChecklist {
+  stemClarity: boolean;
+  optionQuality: boolean;
+  singleBestAnswer: boolean;
+  answerKeyRationale: boolean;
+}
+
+export interface RevisionLogEntry {
+  revisionDate: string;
+  author: string;
+  reviewer: string;
+  changeSummary: string;
+}
+
+export interface EditorialMetadata {
+  author: string;
+  reviewer: string;
+  reviewedAt: string;
+  checklist: EditorialChecklist;
+  revisionLog: RevisionLogEntry[];
 }
 
 export interface StudyMaterial {
@@ -52,6 +75,8 @@ export interface UserProgress {
   currentDifficulty: Difficulty;
   reports: AssessmentReport[];
   materialMastery: { [concept: string]: number }; // 0-100 per concept
+  questionUsage: { [questionId: string]: { shownCount: number; lastShownAt: string | null } };
+  questionPerformance: { [questionId: string]: { attempts: number; wrong: number } };
 }
 
 export interface AssessmentReport {

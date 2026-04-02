@@ -20,7 +20,45 @@ const INITIAL_PROGRESS: UserProgress = {
   currentDifficulty: 'easy',
   reports: [],
   materialMastery: {},
+  questionUsage: {},
+  questionPerformance: {},
 };
+
+const QUESTION_ROTATION_GAP_HOURS = 48;
+
+const shuffle = <T,>(items: T[]): T[] => [...items].sort(() => Math.random() - 0.5);
+
+const pickQuestionsWithRotation = (pool: Question[], count: number, progress: UserProgress): Question[] => {
+  const now = Date.now();
+  const minGapMs = QUESTION_ROTATION_GAP_HOURS * 60 * 60 * 1000;
+
+  const freshPool = pool.filter((q) => {
+    const usage = progress.questionUsage[q.id];
+    if (!usage?.lastShownAt) return true;
+    return now - new Date(usage.lastShownAt).getTime() >= minGapMs;
+  });
+
+  const rotationPool = freshPool.length >= count ? freshPool : pool;
+
+  return shuffle(rotationPool)
+    .sort((a, b) => {
+      const usageA = progress.questionUsage[a.id]?.shownCount ?? 0;
+      const usageB = progress.questionUsage[b.id]?.shownCount ?? 0;
+      return usageA - usageB;
+    })
+    .slice(0, count);
+};
+
+const buildRevisionPriorityQueue = (performance: UserProgress['questionPerformance']) =>
+  Object.entries(performance)
+    .map(([questionId, stats]) => ({
+      questionId,
+      wrongRate: stats.attempts > 0 ? stats.wrong / stats.attempts : 0,
+      attempts: stats.attempts,
+    }))
+    .filter((entry) => entry.attempts >= 3)
+    .sort((a, b) => b.wrongRate - a.wrongRate || b.attempts - a.attempts)
+    .slice(0, 20);
 
 const SUB_TEST_CONFIGS = [
   { name: 'Penalaran Induktif', category: 'TPS', count: 10, time: 600 },
@@ -152,16 +190,16 @@ export function useQuiz() {
 
       if (mode === 'daily') {
         selectedQuestions = [
-          ...wrongPool.sort(() => Math.random() - 0.5).slice(0, 2),
-          ...normalPool.filter(q => q.difficulty === progress.currentDifficulty).sort(() => Math.random() - 0.5).slice(0, 3)
+          ...pickQuestionsWithRotation(wrongPool, 2, progress),
+          ...pickQuestionsWithRotation(normalPool.filter(q => q.difficulty === progress.currentDifficulty), 3, progress)
         ];
       } else if (mode === 'mini') {
         selectedQuestions = [
-          ...wrongPool.sort(() => Math.random() - 0.5).slice(0, 3),
-          ...normalPool.filter(q => q.difficulty === progress.currentDifficulty).sort(() => Math.random() - 0.5).slice(0, 7)
+          ...pickQuestionsWithRotation(wrongPool, 3, progress),
+          ...pickQuestionsWithRotation(normalPool.filter(q => q.difficulty === progress.currentDifficulty), 7, progress)
         ];
       } else {
-        selectedQuestions = pool.sort(() => Math.random() - 0.5).slice(0, 10);
+        selectedQuestions = pickQuestionsWithRotation(pool, 10, progress);
       }
     }
 
@@ -348,9 +386,19 @@ export function useQuiz() {
       const newWrongIds = [...prev.wrongIds];
       const newCompletedIds = [...prev.completedIds];
       const updatedStats = { ...prev.categoryStats };
+      const updatedUsage = { ...prev.questionUsage };
+      const updatedPerformance = { ...prev.questionPerformance };
 
       results.forEach(r => {
         updatedStats[r.category].total += 1;
+        updatedUsage[r.id] = {
+          shownCount: (updatedUsage[r.id]?.shownCount ?? 0) + 1,
+          lastShownAt: new Date().toISOString(),
+        };
+        updatedPerformance[r.id] = {
+          attempts: (updatedPerformance[r.id]?.attempts ?? 0) + 1,
+          wrong: (updatedPerformance[r.id]?.wrong ?? 0) + (r.correct ? 0 : 1),
+        };
         if (r.correct) {
           updatedStats[r.category].correct += 1;
           const idx = newWrongIds.indexOf(r.id);
@@ -384,6 +432,8 @@ export function useQuiz() {
         currentDifficulty: newDifficulty,
         materialMastery: { ...(prev.materialMastery ?? {}), ...materialMastery },
         reports: [report, ...prev.reports].slice(0, 10),
+        questionUsage: updatedUsage,
+        questionPerformance: updatedPerformance,
       };
     });
 
@@ -425,5 +475,6 @@ export function useQuiz() {
     nextSubTest,
     toggleMark,
     setSession,
+    revisionPriorityQueue: buildRevisionPriorityQueue(progress.questionPerformance),
   };
 }
