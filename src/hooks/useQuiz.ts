@@ -13,8 +13,26 @@ import type {
 import { calculateSessionReport } from './quiz/analyticsScoring';
 import { loadProgressFromStorage, STORAGE_KEY } from './quiz/progressMigration';
 import { buildSubTestConfig, pickQuestionsByMode } from './quiz/questionSelection';
+import { trackEvent } from '../lib/analytics';
 
 const clamp = (value: number, min: number, max: number): number => Math.min(max, Math.max(min, value));
+const isFiniteNumberAnswer = (answer: QuestionAnswer): answer is number =>
+  typeof answer === 'number' && Number.isFinite(answer);
+
+const normalizeAnswerByQuestion = (
+  questionType: 'multiple_choice' | 'complex_multiple_choice' | 'short_answer',
+  answer: QuestionAnswer,
+): QuestionAnswer => {
+  if (questionType === 'short_answer') {
+    return isFiniteNumberAnswer(answer) ? answer : null;
+  }
+
+  if (questionType === 'complex_multiple_choice') {
+    return Array.isArray(answer) ? answer : null;
+  }
+
+  return isFiniteNumberAnswer(answer) ? answer : null;
+};
 
 export function useQuiz() {
   const [progress, setProgress] = useState<UserProgress>(() => loadProgressFromStorage());
@@ -156,13 +174,18 @@ export function useQuiz() {
       const nowIso = new Date().toISOString();
       const newCompletedIds = Array.from(new Set([...prev.completedIds, ...session.questions.map((q) => q.id)]));
       const perQuestionResult = session.questions.map((q) => {
-        const answer = session.answers[q.id];
+        const answer = normalizeAnswerByQuestion(q.type, session.answers[q.id] ?? null);
         const isCorrect =
           q.type === 'multiple_choice'
-            ? answer === q.correctAnswer
+            ? typeof answer === 'number' && answer === q.correctAnswer
             : q.type === 'short_answer'
-              ? Number(answer) === Number(q.shortAnswerCorrect)
-              : false;
+              ? typeof answer === 'number' && Number(answer) === Number(q.shortAnswerCorrect)
+              : q.type === 'complex_multiple_choice'
+                ? Array.isArray(answer) &&
+                  Array.isArray(q.complexOptions) &&
+                  q.complexOptions.length > 0 &&
+                  q.complexOptions.every((option, index) => answer[index] === option.correct)
+                : false;
         return { questionId: q.id, isCorrect };
       });
       const wrongIds = perQuestionResult.filter((item) => !item.isCorrect).map((item) => item.questionId);
@@ -233,7 +256,7 @@ export function useQuiz() {
           }
 
           const baselineScore = cycle.baselineScore ?? conceptScore;
-          const status = (conceptScore >= baselineScore ? 'completed' : 'needs_continue') as const;
+          const status: 'completed' | 'needs_continue' = conceptScore >= baselineScore ? 'completed' : 'needs_continue';
           return {
             ...cycle,
             afterScore: conceptScore,
@@ -335,6 +358,7 @@ export function useQuiz() {
 
   const setTarget = useCallback((target: UserTarget) => {
     setProgress((prev) => ({ ...prev, target }));
+    trackEvent('set_target_ptn', { ptn_id: target.ptnId, prodi_id: target.prodiId });
   }, []);
 
   const updateConceptMasteryFromCheckpoint = useCallback((concept: string, scorePercent: number) => {
