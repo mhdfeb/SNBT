@@ -134,12 +134,48 @@ export function useQuiz() {
 
   const nextQuestion = useCallback(() => {
     setSession((prev) => {
-      if (!prev) return prev;
+      if (!prev || prev.isSubmitted) return prev;
+      if (!Array.isArray(prev.questions) || prev.questions.length === 0) return { ...prev, isSubmitted: true };
+
       const activeSubTest = prev.subTests?.[prev.currentSubTestIdx ?? 0];
       const maxIndexInSubTest = activeSubTest?.questionIndices?.[activeSubTest.questionIndices.length - 1];
       const maxAllowedIdx = maxIndexInSubTest ?? prev.questions.length - 1;
-      if (prev.currentIdx >= maxAllowedIdx) return prev;
-      return { ...prev, currentIdx: prev.currentIdx + 1, questionStartedAt: Date.now() };
+      const now = Date.now();
+
+      if (prev.currentIdx >= maxAllowedIdx) {
+        if (!prev.subTests?.length) {
+          return prev;
+        }
+
+        const currentSubTestIdx = prev.currentSubTestIdx ?? 0;
+        const nextSubTestIdx = currentSubTestIdx + 1;
+        const nextSubTest = prev.subTests[nextSubTestIdx];
+        const nextQuestionIdx = nextSubTest?.questionIndices?.[0];
+
+        if (typeof nextQuestionIdx !== 'number') {
+          return prev;
+        }
+
+        return {
+          ...prev,
+          currentSubTestIdx: nextSubTestIdx,
+          currentIdx: clamp(nextQuestionIdx, 0, prev.questions.length - 1),
+          questionStartedAt: now,
+          subTests: prev.subTests.map((subTest, idx) =>
+            idx === nextSubTestIdx
+              ? {
+                  ...subTest,
+                  expiresAt:
+                    typeof subTest.expiresAt === 'number'
+                      ? now + Math.max(0, (subTest.timeLimit ?? 0) * 1000)
+                      : subTest.expiresAt,
+                }
+              : subTest,
+          ),
+        };
+      }
+
+      return { ...prev, currentIdx: clamp(prev.currentIdx + 1, 0, prev.questions.length - 1), questionStartedAt: now };
     });
   }, []);
 

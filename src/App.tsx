@@ -102,14 +102,23 @@ export default function App() {
   };
 
   const finishQuiz = () => {
+    if (!session) return;
     submitQuiz();
     trackEvent('submit_session', {
-      mode: session?.mode ?? 'unknown',
-      answered_count: Object.keys(session?.answers ?? {}).length,
-      total_questions: session?.questions.length ?? 0,
+      mode: session.mode ?? 'unknown',
+      answered_count: Object.keys(session.answers ?? {}).length,
+      total_questions: session.questions.length ?? 0,
     });
     setView('review');
   };
+
+  const isQuizView = view === 'tryout' || view === 'simulation';
+
+  useEffect(() => {
+    if (!isQuizView || !session?.isSubmitted) return;
+    finishQuiz();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isQuizView, session?.isSubmitted]);
 
   const applyTarget = () => {
     if (!selectedPtn || !selectedProdi) {
@@ -139,8 +148,6 @@ export default function App() {
       </main>
     );
   }
-
-  const isQuizView = view === 'tryout' || view === 'simulation';
 
   return (
     <main className="mx-auto flex min-h-screen max-w-5xl flex-col gap-6 px-6 py-10">
@@ -226,7 +233,14 @@ export default function App() {
             <span className="font-semibold">{session ? `${session.currentIdx + 1}/${session.questions.length}` : '0/0'}</span>
             {activeSubTest && subTestRemainingSec !== null ? <span className="text-sm text-amber-700">{activeSubTest.name}: {subTestRemainingSec}s</span> : null}
           </div>
-          {session && currentQuestion ? (
+          {session && session.questions.length === 0 ? (
+            <StatePanel
+              kind="empty"
+              title="Soal tidak tersedia"
+              description="Sesi tidak bisa dilanjutkan karena bank soal kosong untuk mode ini."
+              action={<Button variant="secondary" onClick={() => { setSession(null); setView('dashboard'); }}>Kembali ke Dashboard</Button>}
+            />
+          ) : session && currentQuestion ? (
             <>
               <QuestionRenderer question={currentQuestion} answer={session.answers[currentQuestion.id] ?? null} onAnswer={answerQuestion} submitted={session.isSubmitted} />
               <div className="flex items-center justify-between gap-2">
@@ -239,7 +253,12 @@ export default function App() {
               </div>
             </>
           ) : (
-            <StatePanel kind="empty" title="Tidak ada sesi aktif" description="Mulai tryout atau simulation untuk melanjutkan." action={<Button variant="secondary" onClick={() => setView('dashboard')}>Kembali</Button>} />
+            <StatePanel
+              kind="empty"
+              title="Soal tidak dapat ditampilkan"
+              description="Data soal pada indeks saat ini tidak tersedia. Anda bisa kembali ke dashboard atau akhiri sesi."
+              action={<Button variant="secondary" onClick={() => setView('dashboard')}>Kembali</Button>}
+            />
           )}
           <Button variant="secondary" onClick={() => { setSession(null); setView('dashboard'); }}>Akhiri sesi</Button>
         </section>
