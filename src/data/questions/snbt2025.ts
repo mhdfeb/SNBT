@@ -1,6 +1,10 @@
-import { Question } from '../../types/quiz';
+import { QuestionBankItem } from '../../types/quiz';
 
-export const SNBT2025_QUESTIONS: Question[] = [
+export const SNBT2025_QUESTIONS: QuestionBankItem[] = [
+import { Question } from '../../types/quiz';
+import { withBlueprintMetadata } from './quality';
+
+export const SNBT2025_QUESTIONS: Question[] = withBlueprintMetadata([
   {
     id: 'snbt25-1',
     category: 'TPS',
@@ -72,4 +76,4 @@ export const SNBT2025_QUESTIONS: Question[] = [
     explanation: 'The passage focuses on how rapid urbanization leads to environmental challenges like pollution and loss of green spaces.',
     irtParams: { difficulty: 1.1, discrimination: 1.5, guessing: 0.2 }
   }
-];
+]);
