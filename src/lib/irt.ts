@@ -32,6 +32,22 @@ export function calculateIRTScore(results: { correct: boolean; irtParams: { diff
   return Math.max(200, Math.min(1000, Math.round(score)));
 }
 
+export function getTryoutEquatingFactor(packageId: string) {
+  const factors: Record<string, number> = {
+    'TO-A': 1,
+    'TO-B': 0.97,
+    'TO-C': 1.03,
+  };
+
+  return factors[packageId] ?? 1;
+}
+
+export function applyTryoutEquating(rawScore: number, packageId?: string): number {
+  if (!packageId) return rawScore;
+  const factor = getTryoutEquatingFactor(packageId);
+  return Math.max(200, Math.min(1000, Math.round(rawScore * factor)));
+}
+
 /**
  * Simulates national ranking and percentile based on score
  */
