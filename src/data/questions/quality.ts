@@ -25,7 +25,7 @@ const SOURCE_VALIDITY_BY_CATEGORY: Record<Question['category'], SourceValidity> 
   'Penalaran Matematika': 'verified',
 };
 
-type QuestionSeed = Omit<Question, 'blueprint' | 'qualityMetadata'> &
+export type QuestionSeed = Omit<Question, 'blueprint' | 'qualityMetadata'> &
   Partial<Pick<Question, 'blueprint' | 'qualityMetadata'>>;
 
 const DEFAULT_IRT: Question['irtParams'] = {

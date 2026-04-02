@@ -28,12 +28,9 @@ export const createInitialProgress = (): UserProgress => ({
   conceptHistory: {},
   conceptReviewState: {},
   strategyOutcomes: {},
-  itemPerformance: {},
-  conceptMetrics: {},
   questionHistory: {},
   conceptProfiles: {},
   remedialCycles: [],
-  lastRemedialConcepts: [],
 });
 
 const normalizeMastery = (raw: unknown): Record<string, number> => {
@@ -115,12 +112,9 @@ export const migrateProgress = (raw: unknown): UserProgress => {
     conceptHistory: parsed.conceptHistory ?? {},
     conceptReviewState: parsed.conceptReviewState ?? {},
     strategyOutcomes: parsed.strategyOutcomes ?? {},
-    itemPerformance: parsed.itemPerformance ?? {},
-    conceptMetrics: parsed.conceptMetrics ?? {},
     questionHistory: parsed.questionHistory ?? {},
     conceptProfiles: parsed.conceptProfiles ?? {},
     remedialCycles: parsed.remedialCycles ?? [],
-    lastRemedialConcepts: parsed.lastRemedialConcepts ?? [],
   } as UserProgress;
 };
 

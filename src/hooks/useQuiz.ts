@@ -1,11 +1,38 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { QUESTIONS } from '../data/questions';
-import type { AssessmentReport, Category, Concept, QuizSession, TargetedDrillResult, UserProgress, UserTarget } from '../types/quiz';
+import type {
+  AssessmentReport,
+  Category,
+  Concept,
+  QuestionAnswer,
+  QuizSession,
+  TargetedDrillResult,
+  UserProgress,
+  UserTarget,
+} from '../types/quiz';
 import { calculateSessionReport } from './quiz/analyticsScoring';
 import { loadProgressFromStorage, STORAGE_KEY } from './quiz/progressMigration';
-import { pickQuestionsByMode } from './quiz/questionSelection';
+import { buildSubTestConfig, pickQuestionsByMode } from './quiz/questionSelection';
+import { trackEvent } from '../lib/analytics';
 
 const clamp = (value: number, min: number, max: number): number => Math.min(max, Math.max(min, value));
+const isFiniteNumberAnswer = (answer: QuestionAnswer): answer is number =>
+  typeof answer === 'number' && Number.isFinite(answer);
+
+const normalizeAnswerByQuestion = (
+  questionType: 'multiple_choice' | 'complex_multiple_choice' | 'short_answer',
+  answer: QuestionAnswer,
+): QuestionAnswer => {
+  if (questionType === 'short_answer') {
+    return isFiniteNumberAnswer(answer) ? answer : null;
+  }
+
+  if (questionType === 'complex_multiple_choice') {
+    return Array.isArray(answer) ? answer : null;
+  }
+
+  return isFiniteNumberAnswer(answer) ? answer : null;
+};
 
 export function useQuiz() {
   const [progress, setProgress] = useState<UserProgress>(() => loadProgressFromStorage());
@@ -24,12 +51,36 @@ export function useQuiz() {
     ) => {
       const selectedQuestions = pickQuestionsByMode(QUESTIONS, progress, mode, category, options?.concept);
       const now = Date.now();
+      const subTestConfig = buildSubTestConfig(mode);
+      const shouldUseSubTests = subTestConfig.length > 0;
+      const builtSubTests = shouldUseSubTests
+        ? (() => {
+            let cursor = 0;
+            return subTestConfig
+              .map((subTest) => {
+                const endExclusive = Math.min(cursor + subTest.questionCount, selectedQuestions.length);
+                const questionIndices = Array.from({ length: Math.max(0, endExclusive - cursor) }, (_, idx) => cursor + idx);
+                cursor = endExclusive;
+
+                return {
+                  name: subTest.name,
+                  questionIndices,
+                  timeLimit: subTest.timeLimitSec,
+                  expiresAt: now + subTest.timeLimitSec * 1000,
+                };
+              })
+              .filter((subTest) => subTest.questionIndices.length > 0);
+          })()
+        : undefined;
+
+      const totalTimeLimitSec = builtSubTests?.reduce((total, subTest) => total + subTest.timeLimit, 0);
+      const firstSubTestQuestion = builtSubTests?.[0]?.questionIndices?.[0] ?? 0;
 
       setSession({
         mode,
         selectedCategory: category,
         questions: selectedQuestions,
-        currentIdx: 0,
+        currentIdx: firstSubTestQuestion,
         answers: {},
         marked: {},
         answerTimeline: {},
@@ -37,18 +88,30 @@ export function useQuiz() {
         timePerQuestion: {},
         questionStartedAt: now,
         isSubmitted: false,
+        subTests: builtSubTests,
+        currentSubTestIdx: builtSubTests?.length ? 0 : undefined,
+        totalTimeLimitSec,
+        totalExpiresAt: totalTimeLimitSec ? now + totalTimeLimitSec * 1000 : undefined,
         targetedMeta: options?.concept
           ? {
               concept: options.concept,
               baselineAccuracy: progress.materialMastery?.[options.concept] ?? 0,
             }
           : undefined,
+        remedial:
+          options?.concept && options?.cycleId && options?.remedialPhase
+            ? {
+                cycleId: options.cycleId,
+                concept: options.concept,
+                phase: options.remedialPhase,
+              }
+            : undefined,
       } as QuizSession);
     },
     [progress],
   );
 
-  const answerQuestion = useCallback((answer: unknown) => {
+  const answerQuestion = useCallback((answer: QuestionAnswer) => {
     setSession((prev) => {
       if (!prev || prev.isSubmitted) return prev;
       const qid = prev.questions[prev.currentIdx]?.id;
@@ -68,7 +131,10 @@ export function useQuiz() {
   const nextQuestion = useCallback(() => {
     setSession((prev) => {
       if (!prev) return prev;
-      if (prev.currentIdx >= prev.questions.length - 1) return prev;
+      const activeSubTest = prev.subTests?.[prev.currentSubTestIdx ?? 0];
+      const maxIndexInSubTest = activeSubTest?.questionIndices?.[activeSubTest.questionIndices.length - 1];
+      const maxAllowedIdx = maxIndexInSubTest ?? prev.questions.length - 1;
+      if (prev.currentIdx >= maxAllowedIdx) return prev;
       return { ...prev, currentIdx: prev.currentIdx + 1, questionStartedAt: Date.now() };
     });
   }, []);
@@ -76,7 +142,9 @@ export function useQuiz() {
   const prevQuestion = useCallback(() => {
     setSession((prev) => {
       if (!prev) return prev;
-      if (prev.currentIdx <= 0) return prev;
+      const activeSubTest = prev.subTests?.[prev.currentSubTestIdx ?? 0];
+      const minAllowedIdx = activeSubTest?.questionIndices?.[0] ?? 0;
+      if (prev.currentIdx <= minAllowedIdx) return prev;
       return { ...prev, currentIdx: prev.currentIdx - 1, questionStartedAt: Date.now() };
     });
   }, []);
@@ -103,18 +171,100 @@ export function useQuiz() {
     const today = new Date().toISOString().slice(0, 10);
 
     setProgress((prev) => {
+      const nowIso = new Date().toISOString();
       const newCompletedIds = Array.from(new Set([...prev.completedIds, ...session.questions.map((q) => q.id)]));
-      const wrongIds = session.questions
-        .filter((q) => {
-          const answer = session.answers[q.id];
-          if (q.type === 'multiple_choice') return answer !== q.correctAnswer;
-          if (q.type === 'short_answer') return Number(answer) !== Number(q.shortAnswerCorrect);
-          return false;
-        })
-        .map((q) => q.id);
+      const perQuestionResult = session.questions.map((q) => {
+        const answer = normalizeAnswerByQuestion(q.type, session.answers[q.id] ?? null);
+        const isCorrect =
+          q.type === 'multiple_choice'
+            ? typeof answer === 'number' && answer === q.correctAnswer
+            : q.type === 'short_answer'
+              ? typeof answer === 'number' && Number(answer) === Number(q.shortAnswerCorrect)
+              : q.type === 'complex_multiple_choice'
+                ? Array.isArray(answer) &&
+                  Array.isArray(q.complexOptions) &&
+                  q.complexOptions.length > 0 &&
+                  q.complexOptions.every((option, index) => answer[index] === option.correct)
+                : false;
+        return { questionId: q.id, isCorrect };
+      });
+      const wrongIds = perQuestionResult.filter((item) => !item.isCorrect).map((item) => item.questionId);
 
       const mergedWrong = Array.from(new Set([...prev.wrongIds, ...wrongIds]));
       const nextDifficulty = report.totalScore >= 700 ? 'trap' : report.totalScore >= 550 ? 'medium' : 'easy';
+      const updatedQuestionUsage = perQuestionResult.reduce(
+        (acc, item) => {
+          const current = acc[item.questionId] ?? { shownCount: 0, lastShownAt: null };
+          acc[item.questionId] = {
+            shownCount: (current.shownCount ?? 0) + 1,
+            lastShownAt: nowIso,
+          };
+          return acc;
+        },
+        { ...(prev.questionUsage ?? {}) } as NonNullable<UserProgress['questionUsage']>,
+      );
+      const updatedQuestionPerformance = perQuestionResult.reduce(
+        (acc, item) => {
+          const current = acc[item.questionId] ?? { attempts: 0, wrong: 0 };
+          acc[item.questionId] = {
+            attempts: (current.attempts ?? 0) + 1,
+            wrong: (current.wrong ?? 0) + (item.isCorrect ? 0 : 1),
+          };
+          return acc;
+        },
+        { ...(prev.questionPerformance ?? {}) } as NonNullable<UserProgress['questionPerformance']>,
+      );
+
+      const updatedStrategyOutcomes = (() => {
+        if (!session.strategy) return prev.strategyOutcomes ?? {};
+        const current = prev.strategyOutcomes?.[session.strategy] ?? {
+          attempts: 0,
+          correct: 0,
+          total: 0,
+          avgAccuracy: 0,
+        };
+        const nextAttempts = current.attempts + 1;
+        const nextCorrect = current.correct + (report.correctCount ?? 0);
+        const nextTotal = current.total + session.questions.length;
+
+        return {
+          ...(prev.strategyOutcomes ?? {}),
+          [session.strategy]: {
+            attempts: nextAttempts,
+            correct: nextCorrect,
+            total: nextTotal,
+            avgAccuracy: nextTotal > 0 ? Math.round((nextCorrect / nextTotal) * 100) : 0,
+          },
+        };
+      })();
+
+      const updatedRemedialCycles = (() => {
+        if (session.mode !== 'targeted' || !session.remedial?.cycleId) return prev.remedialCycles ?? [];
+
+        const conceptScore =
+          report.materialMastery?.[session.remedial.concept] ?? prev.materialMastery?.[session.remedial.concept] ?? 0;
+
+        return (prev.remedialCycles ?? []).map((cycle) => {
+          if (cycle.id !== session.remedial?.cycleId) return cycle;
+
+          if (session.remedial.phase === 'baseline') {
+            return {
+              ...cycle,
+              baselineScore: conceptScore,
+              status: 'material_pending' as const,
+            };
+          }
+
+          const baselineScore = cycle.baselineScore ?? conceptScore;
+          const status: 'completed' | 'needs_continue' = conceptScore >= baselineScore ? 'completed' : 'needs_continue';
+          return {
+            ...cycle,
+            afterScore: conceptScore,
+            completedAt: nowIso,
+            status,
+          };
+        });
+      })();
 
       const updatedProgress: UserProgress = {
         ...prev,
@@ -128,6 +278,10 @@ export function useQuiz() {
             ? [report, ...(prev.simulationReports ?? [])].slice(0, 20)
             : (prev.simulationReports ?? []),
         materialMastery: { ...(prev.materialMastery ?? {}), ...(report.materialMastery ?? {}) },
+        questionUsage: updatedQuestionUsage,
+        questionPerformance: updatedQuestionPerformance,
+        strategyOutcomes: updatedStrategyOutcomes,
+        remedialCycles: updatedRemedialCycles,
         dailyProgress: {
           ...prev.dailyProgress,
           [today]: clamp((prev.dailyProgress?.[today] ?? 0) + (report.correctCount ?? 0), 0, 200),
@@ -156,11 +310,17 @@ export function useQuiz() {
 
   const nextSubTest = useCallback(() => {
     setSession((prev) => {
-      if (!prev || prev.isSubmitted || !prev.subTests?.length) return prev;
+      if (!prev || prev.isSubmitted) return prev;
+      if (!Array.isArray(prev.subTests) || prev.subTests.length === 0) return prev;
 
       const now = Date.now();
-      const currentSubTestIdx = prev.currentSubTestIdx ?? 0;
-      const isLastSubTest = currentSubTestIdx >= prev.subTests.length - 1;
+      const totalSubTests = prev.subTests.length;
+      const rawCurrentSubTestIdx = prev.currentSubTestIdx ?? 0;
+      const currentSubTestIdx =
+        Number.isInteger(rawCurrentSubTestIdx) && rawCurrentSubTestIdx >= 0 && rawCurrentSubTestIdx < totalSubTests
+          ? rawCurrentSubTestIdx
+          : 0;
+      const isLastSubTest = currentSubTestIdx >= totalSubTests - 1;
 
       if (isLastSubTest) {
         return {
@@ -172,7 +332,11 @@ export function useQuiz() {
 
       const nextSubTestIdx = currentSubTestIdx + 1;
       const nextSubTest = prev.subTests[nextSubTestIdx];
-      const nextQuestionIdx = nextSubTest?.questionIndices?.[0] ?? prev.currentIdx;
+      const nextQuestionIdxCandidate = nextSubTest?.questionIndices?.[0];
+      const nextQuestionIdx =
+        typeof nextQuestionIdxCandidate === 'number'
+          ? clamp(nextQuestionIdxCandidate, 0, Math.max(prev.questions.length - 1, 0))
+          : prev.currentIdx;
 
       return {
         ...prev,
@@ -183,7 +347,8 @@ export function useQuiz() {
           idx === nextSubTestIdx
             ? {
                 ...subTest,
-                expiresAt: now + subTest.timeLimit * 1000,
+                expiresAt:
+                  typeof subTest.expiresAt === 'number' ? now + Math.max(0, (subTest.timeLimit ?? 0) * 1000) : subTest.expiresAt,
               }
             : subTest,
         ),
@@ -193,6 +358,7 @@ export function useQuiz() {
 
   const setTarget = useCallback((target: UserTarget) => {
     setProgress((prev) => ({ ...prev, target }));
+    trackEvent('set_target_ptn', { ptn_id: target.ptnId, prodi_id: target.prodiId });
   }, []);
 
   const updateConceptMasteryFromCheckpoint = useCallback((concept: string, scorePercent: number) => {
@@ -225,10 +391,18 @@ export function useQuiz() {
           questionId,
           wrongRate: stat.attempts > 0 ? stat.wrong / stat.attempts : 0,
           attempts: stat.attempts ?? 0,
+          shownCount: progress.questionUsage?.[questionId]?.shownCount ?? 0,
+          lastShownAt: progress.questionUsage?.[questionId]?.lastShownAt ?? null,
         }))
-        .sort((a, b) => b.wrongRate - a.wrongRate || b.attempts - a.attempts)
+        .sort(
+          (a, b) =>
+            b.wrongRate - a.wrongRate ||
+            b.attempts - a.attempts ||
+            b.shownCount - a.shownCount ||
+            (b.lastShownAt ? new Date(b.lastShownAt).getTime() : 0) - (a.lastShownAt ? new Date(a.lastShownAt).getTime() : 0),
+        )
         .slice(0, 20),
-    [progress.questionPerformance],
+    [progress.questionPerformance, progress.questionUsage],
   );
 
   return {
