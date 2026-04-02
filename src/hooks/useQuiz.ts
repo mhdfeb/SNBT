@@ -155,7 +155,40 @@ export function useQuiz() {
   }, [progress, session]);
 
   const nextSubTest = useCallback(() => {
-    setSession((prev) => prev);
+    setSession((prev) => {
+      if (!prev || prev.isSubmitted || !prev.subTests?.length) return prev;
+
+      const now = Date.now();
+      const currentSubTestIdx = prev.currentSubTestIdx ?? 0;
+      const isLastSubTest = currentSubTestIdx >= prev.subTests.length - 1;
+
+      if (isLastSubTest) {
+        return {
+          ...prev,
+          isSubmitted: true,
+          questionStartedAt: now,
+        };
+      }
+
+      const nextSubTestIdx = currentSubTestIdx + 1;
+      const nextSubTest = prev.subTests[nextSubTestIdx];
+      const nextQuestionIdx = nextSubTest?.questionIndices?.[0] ?? prev.currentIdx;
+
+      return {
+        ...prev,
+        currentSubTestIdx: nextSubTestIdx,
+        currentIdx: nextQuestionIdx,
+        questionStartedAt: now,
+        subTests: prev.subTests.map((subTest, idx) =>
+          idx === nextSubTestIdx
+            ? {
+                ...subTest,
+                expiresAt: now + subTest.timeLimit * 1000,
+              }
+            : subTest,
+        ),
+      };
+    });
   }, []);
 
   const setTarget = useCallback((target: UserTarget) => {

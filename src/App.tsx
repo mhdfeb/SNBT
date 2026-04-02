@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { BookOpen, CheckCircle2, ChevronLeft, ChevronRight, Home, Target } from 'lucide-react';
 import { useQuiz } from './hooks/useQuiz';
 import { QUESTIONS } from './data/questions';
@@ -65,10 +65,12 @@ export default function App() {
     nextQuestion,
     prevQuestion,
     submitQuiz,
+    nextSubTest,
     setSession,
   } = useQuiz();
 
   const [view, setView] = useState<'home' | 'quiz' | 'result'>('home');
+  const [now, setNow] = useState(() => Date.now());
 
   const currentQuestion = useMemo(() => {
     if (!session) return null;
@@ -84,6 +86,38 @@ export default function App() {
     submitQuiz();
     setView('result');
   };
+
+  useEffect(() => {
+    const id = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(id);
+  }, []);
+
+  useEffect(() => {
+    if (view !== 'quiz' || !session?.subTests?.length || session.isSubmitted) return;
+
+    const currentSubTest = session.subTests[session.currentSubTestIdx ?? 0];
+    if (!currentSubTest?.expiresAt) return;
+
+    if (Date.now() >= currentSubTest.expiresAt) {
+      nextSubTest();
+    }
+  }, [nextSubTest, session, view, now]);
+
+  useEffect(() => {
+    if (view !== 'quiz' || !session?.isSubmitted) return;
+    submitQuiz();
+    setView('result');
+  }, [session?.isSubmitted, submitQuiz, view]);
+
+  const activeSubTest = useMemo(() => {
+    if (!session?.subTests?.length) return null;
+    return session.subTests[session.currentSubTestIdx ?? 0] ?? null;
+  }, [session]);
+
+  const subTestRemainingSec = useMemo(() => {
+    if (!activeSubTest?.expiresAt) return null;
+    return Math.max(0, Math.ceil((activeSubTest.expiresAt - now) / 1000));
+  }, [activeSubTest, now]);
 
   if (view === 'home') {
     return (
@@ -130,9 +164,16 @@ export default function App() {
         <h2 className="inline-flex items-center gap-2 text-xl font-bold text-slate-900">
           <BookOpen size={20} /> Mode Quiz
         </h2>
-        <span className="text-sm text-slate-500">
-          {session ? `${session.currentIdx + 1}/${session.questions.length}` : '0/0'}
-        </span>
+        <div className="text-right">
+          <span className="block text-sm text-slate-500">
+            {session ? `${session.currentIdx + 1}/${session.questions.length}` : '0/0'}
+          </span>
+          {activeSubTest && subTestRemainingSec !== null ? (
+            <span className="block text-xs font-semibold text-amber-600">
+              {activeSubTest.name}: {subTestRemainingSec}s
+            </span>
+          ) : null}
+        </div>
       </header>
 
       {session && currentQuestion ? (
