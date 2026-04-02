@@ -1,19 +1,50 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
-  BarChart3,
   BookOpen,
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
+  Compass,
   Home,
+  LineChart,
   Sparkles,
   Target,
-  TrendingUp,
 } from 'lucide-react';
 import { useQuiz } from './hooks/useQuiz';
 import { QUESTIONS } from './data/questions';
-import { QuestionRenderer } from './components/quiz/QuestionRenderer';
-import type { Concept, QuizSession } from './types/quiz';
+import { PTN_DATA } from './data/ptn';
+import { STUDY_MATERIALS } from './data/materials';
+import { PREDICTIONS_2026 } from './data/predictions2026';
+import type { AssessmentReport, Concept, PTN, Prodi, Question, QuestionAnswer } from './types/quiz';
+
+type Screen = 'Dashboard' | 'Tryout' | 'Simulation' | 'Target PTN' | 'Materi' | 'Review';
+
+function QuestionCard({
+  question,
+  answer,
+  onAnswer,
+  submitted,
+}: {
+  question: Question;
+  answer: QuestionAnswer;
+  onAnswer: (value: QuestionAnswer) => void;
+  submitted: boolean;
+}) {
+  if (question.type === 'short_answer') {
+    return (
+      <div className="space-y-3">
+        <p className="font-semibold text-slate-700">{question.question}</p>
+        <input
+          type="number"
+          className="w-full rounded-lg border border-slate-300 p-3"
+          value={typeof answer === 'number' ? answer : ''}
+          disabled={submitted}
+          onChange={(e) => onAnswer(Number(e.target.value))}
+          placeholder="Masukkan jawaban"
+        />
+      </div>
+    );
+  }
 
 const SESSION_MODES: { mode: QuizSession['mode']; label: string }[] = [
   { mode: 'mini', label: 'Mini Quiz' },
@@ -27,6 +58,8 @@ const SESSION_MODES: { mode: QuizSession['mode']; label: string }[] = [
 
 type AppView = 'home' | 'quiz' | 'result' | 'dashboard' | 'materials' | 'target';
 
+const screenOrder: Screen[] = ['Dashboard', 'Tryout', 'Simulation', 'Target PTN', 'Materi', 'Review'];
+
 export default function App() {
   const {
     session,
@@ -38,49 +71,78 @@ export default function App() {
     submitQuiz,
     nextSubTest,
     setSession,
+    setTarget,
   } = useQuiz();
 
-  const [view, setView] = useState<AppView>('home');
+  const [screen, setScreen] = useState<Screen>('Dashboard');
   const [now, setNow] = useState(() => Date.now());
+  const [latestReport, setLatestReport] = useState<AssessmentReport | null>(null);
   const [selectedPtnId, setSelectedPtnId] = useState<string>(PTN_DATA[0]?.id ?? '');
-  const [selectedProdiId, setSelectedProdiId] = useState<string>(PTN_DATA[0]?.prodi[0]?.id ?? '');
+  const [selectedProdiId, setSelectedProdiId] = useState<string>(PTN_DATA[0]?.prodi?.[0]?.id ?? '');
+  const [selectedMaterialConcept, setSelectedMaterialConcept] = useState<Concept | null>(null);
 
   const currentQuestion = useMemo(() => {
     if (!session) return null;
     return session.questions[session.currentIdx] ?? null;
   }, [session]);
 
-  const firstCategory = useMemo(() => QUESTIONS[0]?.category, []);
-  const availableConcepts = useMemo(
-    () => Array.from(new Set(QUESTIONS.map((question) => question.concept).filter(Boolean))) as Concept[],
-    [],
+  const weakConcepts = useMemo(() => {
+    const entries = Object.entries(progress.materialMastery ?? {});
+    if (entries.length === 0) return ['Penalaran Induktif', 'Literasi Bahasa Indonesia', 'Penalaran Matematika'] as Concept[];
+
+    return entries
+      .sort((a, b) => a[1] - b[1])
+      .slice(0, 3)
+      .map(([concept]) => concept as Concept);
+  }, [progress.materialMastery]);
+
+  const remedialMaterials = useMemo(
+    () => STUDY_MATERIALS.filter((material) => weakConcepts.includes(material.concept)).slice(0, 6),
+    [weakConcepts],
   );
-  const weakestConcept = useMemo(() => {
-    if (availableConcepts.length === 0) return undefined;
 
-    const mastered = progress.materialMastery ?? {};
-    return [...availableConcepts].sort((a, b) => (mastered[a] ?? 0) - (mastered[b] ?? 0))[0];
-  }, [availableConcepts, progress.materialMastery]);
+  const weeklyInsights = useMemo(() => {
+    const weakCategories = Object.entries(latestReport?.categoryScores ?? {})
+      .sort((a, b) => a[1] - b[1])
+      .map(([category]) => category);
 
-  const startModeSession = (mode: QuizSession['mode']) => {
-    if (mode === 'category' && firstCategory) {
-      startSession(mode, firstCategory);
-    } else if (mode === 'targeted') {
-      startSession(mode, undefined, { concept: weakestConcept ?? availableConcepts[0] });
-    } else {
-      startSession(mode);
-    }
-    setView('quiz');
+    const prioritized = PREDICTIONS_2026.filter((prediction) => weakCategories.includes(prediction.category));
+    return (prioritized.length > 0 ? prioritized : PREDICTIONS_2026).slice(0, 3);
+  }, [latestReport]);
+
+  const selectedPtn = useMemo<PTN | null>(() => PTN_DATA.find((item) => item.id === selectedPtnId) ?? null, [selectedPtnId]);
+
+  const selectedProdi = useMemo<Prodi | null>(
+    () => selectedPtn?.prodi.find((item) => item.id === selectedProdiId) ?? null,
+    [selectedPtn, selectedProdiId],
+  );
+
+  const latestScore = latestReport?.totalScore ?? progress.reports?.[0]?.totalScore ?? 0;
+  const targetGap = selectedProdi ? selectedProdi.passingGrade - latestScore : null;
+
+  const startTryout = () => {
+    startSession('tryout');
+    setScreen('Tryout');
   };
 
-  const startTargetedDrill = (concept: Concept) => {
-    startSession('targeted', undefined, { concept });
-    setView('quiz');
+  const startSimulation = () => {
+    startSession('simulation');
+    setScreen('Simulation');
+  };
+
+  const startTargetedDrill = (concept?: Concept) => {
+    const focusConcept = concept ?? weakConcepts[0];
+    startSession('targeted', undefined, { concept: focusConcept });
+    setSelectedMaterialConcept(focusConcept);
+    setScreen('Tryout');
   };
 
   const finishQuiz = () => {
-    submitQuiz();
-    setView('result');
+    const report = submitQuiz();
+    if (report) {
+      setLatestReport(report);
+    }
+    setScreen('Review');
   };
 
   useEffect(() => {
@@ -89,7 +151,7 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (view !== 'quiz' || !session?.subTests?.length || session.isSubmitted) return;
+    if ((screen !== 'Tryout' && screen !== 'Simulation') || !session?.subTests?.length || session.isSubmitted) return;
 
     const currentSubTest = session.subTests[session.currentSubTestIdx ?? 0];
     if (!currentSubTest?.expiresAt) return;
@@ -97,13 +159,20 @@ export default function App() {
     if (Date.now() >= currentSubTest.expiresAt) {
       nextSubTest();
     }
-  }, [nextSubTest, session, view, now]);
+  }, [nextSubTest, screen, session, now]);
 
   useEffect(() => {
-    if (view !== 'quiz' || !session?.isSubmitted) return;
-    submitQuiz();
-    setView('result');
-  }, [session?.isSubmitted, submitQuiz, view]);
+    if ((screen !== 'Tryout' && screen !== 'Simulation') || !session?.isSubmitted) return;
+    finishQuiz();
+  }, [session?.isSubmitted, screen]);
+
+  useEffect(() => {
+    if (!selectedPtn?.prodi?.length) return;
+    setSelectedProdiId((prev) => {
+      if (selectedPtn.prodi.some((prodi) => prodi.id === prev)) return prev;
+      return selectedPtn.prodi[0].id;
+    });
+  }, [selectedPtn]);
 
   useEffect(() => {
     if (!selectedPtn) return;
@@ -122,259 +191,11 @@ export default function App() {
     return Math.max(0, Math.ceil((activeSubTest.expiresAt - now) / 1000));
   }, [activeSubTest, now]);
 
-  if (view === 'home') {
-    return (
-      <main className="mx-auto flex min-h-screen max-w-4xl flex-col justify-center gap-6 px-6 py-10">
-        <h1 className="text-3xl font-bold text-slate-900">SNBT Practice Arena</h1>
-        <p className="text-slate-600">
-          Bank soal aktif: <span className="font-semibold">{QUESTIONS.length}</span> soal.
-        </p>
-        <div className="flex flex-wrap gap-3">
-          {SESSION_MODES.map((item) => (
-            <button
-              key={item.mode}
-              type="button"
-              onClick={() => startModeSession(item.mode)}
-              className="inline-flex w-fit items-center gap-2 rounded-xl bg-indigo-600 px-5 py-3 font-semibold text-white hover:bg-indigo-700"
-            >
-              <Target size={18} /> {item.label}
-            </button>
-          ))}
-        </div>
-      </main>
-    );
-  }
-
-  if (view === 'result') {
-    return (
-      <main className="mx-auto flex min-h-screen max-w-4xl flex-col justify-center gap-4 px-6 py-10">
-        <h2 className="text-2xl font-bold text-slate-900">Quiz selesai</h2>
-        <p className="text-slate-600">
-          Total sesi tersimpan: <span className="font-semibold">{progress.reports?.length ?? 0}</span>
-        </p>
-        <div className="flex flex-wrap gap-3">
-          <button
-            type="button"
-            onClick={() => {
-              setSession(null);
-              setView('home');
-            }}
-            className="inline-flex w-fit items-center gap-2 rounded-xl border border-slate-300 px-5 py-3 font-semibold text-slate-700 hover:bg-slate-50"
-          >
-            <Home size={18} /> Kembali ke beranda
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setSession(null);
-              setView('dashboard');
-            }}
-            className="inline-flex w-fit items-center gap-2 rounded-xl bg-indigo-600 px-5 py-3 font-semibold text-white hover:bg-indigo-700"
-          >
-            <BarChart3 size={18} /> Lihat Analisis Progres
-          </button>
-        </div>
-      </main>
-    );
-  }
-
-  if (view === 'dashboard') {
-    return (
-      <main className="mx-auto flex min-h-screen max-w-4xl flex-col gap-6 px-6 py-10">
-        <header className="flex items-center justify-between">
-          <h2 className="text-2xl font-bold text-slate-900">Dashboard Progres</h2>
-          <button
-            type="button"
-            onClick={() => setView('home')}
-            className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-4 py-2 text-slate-700"
-          >
-            <Home size={16} /> Beranda
-          </button>
-        </header>
-
-        {!latestReport ? (
-          <p className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-amber-800">
-            Belum ada report. Jalankan quiz dulu untuk melihat kategori lemah/kuat.
-          </p>
-        ) : (
-          <>
-            <section className="grid gap-3 sm:grid-cols-3">
-              <div className="rounded-xl border border-slate-200 p-4">
-                <p className="text-sm text-slate-500">Skor terakhir</p>
-                <p className="text-2xl font-bold text-slate-900">{latestReport.totalScore}</p>
-              </div>
-              <div className="rounded-xl border border-slate-200 p-4">
-                <p className="text-sm text-slate-500">Konsep lemah</p>
-                <p className="text-2xl font-bold text-rose-600">{weakConcepts.length}</p>
-              </div>
-              <div className="rounded-xl border border-slate-200 p-4">
-                <p className="text-sm text-slate-500">Konsep kuat</p>
-                <p className="text-2xl font-bold text-emerald-600">{strongConcepts.length}</p>
-              </div>
-            </section>
-
-            <section className="grid gap-4 md:grid-cols-2">
-              <div className="rounded-xl border border-rose-200 bg-rose-50 p-4">
-                <h3 className="font-semibold text-rose-900">Kategori lemah (basis latihan targeted)</h3>
-                <ul className="mt-2 space-y-2 text-sm text-rose-800">
-                  {weakConcepts.length > 0 ? (
-                    weakConcepts.map((concept) => (
-                      <li key={concept} className="flex items-center justify-between gap-2">
-                        <span>{concept}</span>
-                        <button
-                          type="button"
-                          onClick={() => startTargetedDrill(concept)}
-                          className="rounded-md bg-rose-600 px-3 py-1 text-xs font-semibold text-white"
-                        >
-                          Latihan targeted
-                        </button>
-                      </li>
-                    ))
-                  ) : (
-                    <li>Tidak ada konsep kritis. Pertahankan konsistensi dengan mini quiz.</li>
-                  )}
-                </ul>
-              </div>
-
-              <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
-                <h3 className="font-semibold text-emerald-900">Kategori kuat</h3>
-                <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-emerald-800">
-                  {strongConcepts.length > 0 ? (
-                    strongConcepts.map((concept) => <li key={concept}>{concept}</li>)
-                  ) : (
-                    <li>Belum ada konsep yang stabil di level kuat.</li>
-                  )}
-                </ul>
-              </div>
-            </section>
-
-            <section className="rounded-xl border border-indigo-200 bg-indigo-50 p-4">
-              <h3 className="inline-flex items-center gap-2 font-semibold text-indigo-900">
-                <Sparkles size={16} /> Insight strategi mingguan (Prediksi 2026)
-              </h3>
-              <div className="mt-3 grid gap-3 md:grid-cols-2">
-                {weeklyInsight.map((item) => (
-                  <article key={item.id} className="rounded-lg border border-indigo-100 bg-white p-3">
-                    <p className="text-sm font-semibold text-slate-900">{item.title}</p>
-                    <p className="mt-1 text-sm text-slate-600">{item.summary}</p>
-                  </article>
-                ))}
-              </div>
-            </section>
-          </>
-        )}
-      </main>
-    );
-  }
-
-  if (view === 'materials') {
-    return (
-      <main className="mx-auto flex min-h-screen max-w-4xl flex-col gap-6 px-6 py-10">
-        <header className="flex items-center justify-between">
-          <h2 className="text-2xl font-bold text-slate-900">Materi Belajar Rekomendasi</h2>
-          <button
-            type="button"
-            onClick={() => setView('home')}
-            className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-4 py-2 text-slate-700"
-          >
-            <Home size={16} /> Beranda
-          </button>
-        </header>
-
-        <p className="text-slate-600">
-          Materi diambil dari konsep lemah pada report terbaru. Jika belum ada report, sistem menampilkan materi prioritas umum.
-        </p>
-
-        <div className="grid gap-4">
-          {recommendedMaterials.map((material) => (
-            <article key={material.id} className="rounded-xl border border-slate-200 p-4">
-              <p className="text-xs font-semibold uppercase tracking-wide text-indigo-600">
-                {material.category} · Priority {material.priority}
-              </p>
-              <h3 className="mt-1 font-semibold text-slate-900">{material.title}</h3>
-              <p className="mt-1 text-sm text-slate-600">{material.summary}</p>
-              <p className="mt-2 text-xs text-slate-500">{material.scoreImpact}</p>
-            </article>
-          ))}
-        </div>
-      </main>
-    );
-  }
-
-  if (view === 'target') {
-    return (
-      <main className="mx-auto flex min-h-screen max-w-4xl flex-col gap-6 px-6 py-10">
-        <header className="flex items-center justify-between">
-          <h2 className="text-2xl font-bold text-slate-900">Target PTN</h2>
-          <button
-            type="button"
-            onClick={() => setView('home')}
-            className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-4 py-2 text-slate-700"
-          >
-            <Home size={16} /> Beranda
-          </button>
-        </header>
-
-        <div className="grid gap-4 md:grid-cols-2">
-          <label className="space-y-2">
-            <span className="text-sm font-semibold text-slate-700">Pilih PTN</span>
-            <select
-              className="w-full rounded-lg border border-slate-300 p-2"
-              value={selectedPtn?.id ?? ''}
-              onChange={(event) => setSelectedPtnId(event.target.value)}
-            >
-              {PTN_DATA.map((ptn) => (
-                <option key={ptn.id} value={ptn.id}>
-                  {ptn.name} ({ptn.location})
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <label className="space-y-2">
-            <span className="text-sm font-semibold text-slate-700">Pilih Prodi</span>
-            <select
-              className="w-full rounded-lg border border-slate-300 p-2"
-              value={selectedProdi?.id ?? ''}
-              onChange={(event) => setSelectedProdiId(event.target.value)}
-            >
-              {(selectedPtn?.prodi ?? []).map((prodi) => (
-                <option key={prodi.id} value={prodi.id}>
-                  {prodi.name}
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
-
-        {selectedPtn && selectedProdi ? (
-          <section className="rounded-xl border border-slate-200 p-4">
-            <h3 className="font-semibold text-slate-900">
-              {selectedPtn.name} — {selectedProdi.name}
-            </h3>
-            <ul className="mt-2 space-y-1 text-sm text-slate-600">
-              <li>Passing grade estimasi: {selectedProdi.passingGrade}</li>
-              <li>Daya tampung: {selectedProdi.capacity}</li>
-              <li>Peminat tahun lalu: {selectedProdi.applicants}</li>
-            </ul>
-            <p className="mt-3 rounded-lg bg-slate-50 p-3 text-sm text-slate-700">
-              {latestReport
-                ? scoreGap && scoreGap > 0
-                  ? `Skor kamu masih kurang ${scoreGap} poin dari target. Fokuskan latihan targeted ke konsep lemah.`
-                  : 'Skor kamu sudah menyentuh/melewati passing grade target. Jaga konsistensi akurasi.'
-                : 'Belum ada skor terbaru. Ambil quiz cepat dulu untuk mengukur gap terhadap target PTN.'}
-            </p>
-          </section>
-        ) : null}
-      </main>
-    );
-  }
-
-  return (
-    <main className="mx-auto flex min-h-screen max-w-3xl flex-col gap-6 px-6 py-10">
+  const renderQuizScreen = () => (
+    <>
       <header className="flex items-center justify-between">
         <h2 className="inline-flex items-center gap-2 text-xl font-bold text-slate-900">
-          <BookOpen size={20} /> Mode Quiz ({session?.mode ?? '-'})
+          <BookOpen size={20} /> {session?.mode === 'simulation' ? 'Mode Simulasi' : 'Mode Tryout / Drill'}
         </h2>
         <div className="text-right">
           <span className="block text-sm text-slate-500">
@@ -387,6 +208,12 @@ export default function App() {
           ) : null}
         </div>
       </header>
+
+      {selectedMaterialConcept ? (
+        <p className="rounded-lg border border-indigo-200 bg-indigo-50 p-3 text-sm text-indigo-700">
+          Drill targeted aktif untuk konsep: <span className="font-semibold">{selectedMaterialConcept}</span>
+        </p>
+      ) : null}
 
       {session && currentQuestion ? (
         <>
@@ -429,6 +256,239 @@ export default function App() {
       ) : (
         <p className="text-slate-600">Tidak ada sesi aktif.</p>
       )}
+    </>
+  );
+
+  return (
+    <main className="mx-auto flex min-h-screen max-w-5xl flex-col gap-6 px-6 py-8">
+      <header className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-4">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900">SNBT Practice Arena</h1>
+          <p className="text-sm text-slate-600">Bank soal aktif: {QUESTIONS.length} soal</p>
+        </div>
+        <nav className="flex flex-wrap gap-2">
+          {screenOrder.map((item) => (
+            <button
+              key={item}
+              type="button"
+              onClick={() => setScreen(item)}
+              className={`rounded-lg px-3 py-2 text-sm font-medium ${
+                screen === item ? 'bg-indigo-600 text-white' : 'border border-slate-300 text-slate-700'
+              }`}
+            >
+              {item}
+            </button>
+          ))}
+        </nav>
+      </header>
+
+      {screen === 'Dashboard' ? (
+        <section className="grid gap-4 md:grid-cols-2">
+          <article className="rounded-xl border border-slate-200 bg-white p-5">
+            <h3 className="text-lg font-bold text-slate-900">Aksi Cepat</h3>
+            <div className="mt-4 flex flex-wrap gap-3">
+              <button
+                type="button"
+                onClick={startTryout}
+                className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 font-semibold text-white"
+              >
+                <Target size={16} /> Mulai Tryout
+              </button>
+              <button
+                type="button"
+                onClick={startSimulation}
+                className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 font-semibold text-white"
+              >
+                <Compass size={16} /> Simulasi
+              </button>
+            </div>
+          </article>
+          <article className="rounded-xl border border-slate-200 bg-white p-5">
+            <h3 className="inline-flex items-center gap-2 text-lg font-bold text-slate-900">
+              <LineChart size={18} /> Insight Belajar Mingguan (Prediksi 2026)
+            </h3>
+            <ul className="mt-3 space-y-2 text-sm text-slate-700">
+              {weeklyInsights.map((insight) => (
+                <li key={insight.id} className="rounded-lg bg-slate-50 p-3">
+                  <p className="font-semibold">{insight.title}</p>
+                  <p>{insight.summary}</p>
+                </li>
+              ))}
+            </ul>
+          </article>
+        </section>
+      ) : null}
+
+      {screen === 'Tryout' || screen === 'Simulation' ? <section className="space-y-4">{renderQuizScreen()}</section> : null}
+
+      {screen === 'Target PTN' ? (
+        <section className="grid gap-4 md:grid-cols-2">
+          <article className="space-y-3 rounded-xl border border-slate-200 bg-white p-5">
+            <h3 className="text-lg font-bold text-slate-900">Target Kampus & Prodi</h3>
+            <label className="block text-sm text-slate-600">
+              Pilih PTN
+              <select
+                value={selectedPtnId}
+                onChange={(e) => setSelectedPtnId(e.target.value)}
+                className="mt-1 w-full rounded-lg border border-slate-300 p-2"
+              >
+                {PTN_DATA.map((ptn) => (
+                  <option key={ptn.id} value={ptn.id}>
+                    {ptn.name} ({ptn.location})
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="block text-sm text-slate-600">
+              Pilih Prodi
+              <select
+                value={selectedProdiId}
+                onChange={(e) => setSelectedProdiId(e.target.value)}
+                className="mt-1 w-full rounded-lg border border-slate-300 p-2"
+              >
+                {selectedPtn?.prodi.map((prodi) => (
+                  <option key={prodi.id} value={prodi.id}>
+                    {prodi.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <button
+              type="button"
+              onClick={() => selectedPtn && selectedProdi && setTarget({ ptnId: selectedPtn.id, prodiId: selectedProdi.id })}
+              className="rounded-lg bg-indigo-600 px-4 py-2 font-semibold text-white"
+            >
+              Simpan Target
+            </button>
+          </article>
+
+          <article className="rounded-xl border border-slate-200 bg-white p-5 text-sm text-slate-700">
+            <h4 className="text-lg font-bold text-slate-900">Kebutuhan Skor</h4>
+            {selectedPtn && selectedProdi ? (
+              <div className="mt-3 space-y-2">
+                <p>
+                  Target: <span className="font-semibold">{selectedPtn.name} - {selectedProdi.name}</span>
+                </p>
+                <p>Passing grade estimasi: <span className="font-semibold">{selectedProdi.passingGrade}</span></p>
+                <p>Daya tampung: {selectedProdi.capacity} | Peminat: {selectedProdi.applicants}</p>
+                <p>
+                  Skor terkini kamu: <span className="font-semibold">{latestScore}</span>
+                </p>
+                <p className={targetGap !== null && targetGap <= 0 ? 'font-semibold text-emerald-700' : 'font-semibold text-amber-700'}>
+                  Gap menuju target: {targetGap !== null ? (targetGap <= 0 ? `+${Math.abs(targetGap)} (Aman)` : `-${targetGap}`) : '-'}
+                </p>
+              </div>
+            ) : (
+              <p className="mt-3">Pilih PTN dan prodi untuk melihat kebutuhan skor.</p>
+            )}
+          </article>
+        </section>
+      ) : null}
+
+      {screen === 'Materi' ? (
+        <section className="rounded-xl border border-slate-200 bg-white p-5">
+          <h3 className="inline-flex items-center gap-2 text-lg font-bold text-slate-900">
+            <Sparkles size={18} /> Materi Remedial Otomatis
+          </h3>
+          <p className="mt-2 text-sm text-slate-600">
+            Berdasarkan konsep lemah kamu: <span className="font-semibold">{weakConcepts.join(', ')}</span>
+          </p>
+          <div className="mt-4 grid gap-3 md:grid-cols-2">
+            {remedialMaterials.map((material) => (
+              <article key={material.id} className="rounded-lg border border-slate-200 p-4">
+                <p className="text-xs font-semibold uppercase text-indigo-600">{material.category}</p>
+                <h4 className="font-semibold text-slate-900">{material.title}</h4>
+                <p className="mt-1 text-sm text-slate-600">{material.summary}</p>
+                <button
+                  type="button"
+                  onClick={() => startTargetedDrill(material.concept)}
+                  className="mt-3 rounded-lg border border-indigo-300 px-3 py-2 text-sm font-semibold text-indigo-700"
+                >
+                  Drill targeted konsep ini
+                </button>
+              </article>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      {screen === 'Review' ? (
+        <section className="space-y-4 rounded-xl border border-slate-200 bg-white p-5">
+          <h3 className="text-xl font-bold text-slate-900">Report Detail Hasil Sesi</h3>
+          {latestReport ? (
+            <>
+              <p className="text-slate-700">
+                Skor total: <span className="font-semibold">{latestReport.totalScore}</span> | Readiness index:{' '}
+                <span className="font-semibold">{latestReport.readinessIndex}</span> | Konsistensi:{' '}
+                <span className="font-semibold">{latestReport.consistency}</span>
+              </p>
+              <div className="grid gap-3 md:grid-cols-2">
+                {latestReport.readinessBySubTest.map((item) => (
+                  <div key={item.subTest} className="rounded-lg border border-slate-200 p-3 text-sm">
+                    <p className="font-semibold text-slate-900">{item.subTest}</p>
+                    <p>
+                      Readiness: <span className="font-semibold">{item.readiness}</span> | Skor: {item.score}
+                    </p>
+                    <p>Trend: {item.trend} poin/sesi</p>
+                    <p>Stability: {item.stability}%</p>
+                  </div>
+                ))}
+              </div>
+
+              <div className="rounded-lg bg-slate-50 p-4 text-sm text-slate-700">
+                <p className="font-semibold text-slate-900">Rekomendasi Fokus</p>
+                <ul className="mt-2 list-disc space-y-1 pl-5">
+                  {(latestReport.focusRecommendations ?? []).map((recommendation) => (
+                    <li key={recommendation}>{recommendation}</li>
+                  ))}
+                </ul>
+                <p className="mt-3">
+                  Prediksi performa: <span className="font-medium">{latestReport.performancePrediction?.summary}</span>
+                </p>
+              </div>
+
+              <div className="flex flex-wrap gap-3">
+                <button
+                  type="button"
+                  onClick={() => setScreen('Materi')}
+                  className="rounded-lg bg-indigo-600 px-4 py-2 font-semibold text-white"
+                >
+                  1) Lanjut ke Rekomendasi Materi
+                </button>
+                <button
+                  type="button"
+                  onClick={() => startTargetedDrill()}
+                  className="rounded-lg border border-indigo-300 px-4 py-2 font-semibold text-indigo-700"
+                >
+                  2) Drill Targeted Konsep Lemah
+                </button>
+                <button
+                  type="button"
+                  onClick={startSimulation}
+                  className="rounded-lg border border-emerald-300 px-4 py-2 font-semibold text-emerald-700"
+                >
+                  3) Simulasi Ulang
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSession(null);
+                    setSelectedMaterialConcept(null);
+                    setScreen('Dashboard');
+                  }}
+                  className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-4 py-2 font-semibold text-slate-700"
+                >
+                  <Home size={16} /> Kembali Dashboard
+                </button>
+              </div>
+            </>
+          ) : (
+            <p className="text-slate-600">Belum ada report. Selesaikan tryout/simulasi terlebih dahulu.</p>
+          )}
+        </section>
+      ) : null}
     </main>
   );
 }
