@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { BookOpen, CheckCircle2, ChevronLeft, ChevronRight, Home, Target } from 'lucide-react';
 import { useQuiz } from './hooks/useQuiz';
 import { QUESTIONS } from './data/questions';
-import type { Question } from './types/quiz';
+import type { Question, QuestionAnswer } from './types/quiz';
 
 function QuestionCard({
   question,
@@ -11,8 +11,8 @@ function QuestionCard({
   submitted,
 }: {
   question: Question;
-  answer: unknown;
-  onAnswer: (value: unknown) => void;
+  answer: QuestionAnswer;
+  onAnswer: (value: QuestionAnswer) => void;
   submitted: boolean;
 }) {
   if (question.type === 'short_answer') {

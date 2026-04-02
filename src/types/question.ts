@@ -94,6 +94,8 @@ export interface Question {
   editorial?: EditorialMetadata;
 }
 
+export type QuestionAnswer = number | boolean[] | null;
+
 export type QuestionBankItem = Omit<Question, 'qualityMetadata'>;
 
 export interface DistractorOptionPerformance {
@@ -156,7 +158,7 @@ export interface StudyMaterial {
     }[];
   }[];
   sources: { name: string; url: string }[];
-  learningBlocks: {
+  learningBlocks?: {
     id: string;
     type: 'core_concept' | 'worked_example' | 'common_trap' | 'quick_drill';
     title: string;

@@ -1,6 +1,7 @@
-import { withBlueprintMetadata, type QuestionSeed } from './quality';
+import { withBlueprintMetadata } from './quality';
+import type { Question } from '../../types/quiz';
 
-export const HOTS_QUESTIONS: QuestionSeed[] = withBlueprintMetadata([
+export const HOTS_QUESTIONS: Question[] = withBlueprintMetadata([
   // --- HOTS: Penalaran Induktif ---
   {
     id: 'pi-hots-1',
