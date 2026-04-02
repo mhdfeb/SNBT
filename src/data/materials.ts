@@ -1,6 +1,5 @@
 import { StudyMaterial } from '../types/quiz';
 
-const LEGACY_STUDY_MATERIALS: StudyMaterial[] = [
 const PRIORITY_ORDER: StudyMaterial['priority'][] = ['high', 'medium', 'low'];
 
 const getPriorityMeta = (index: number) => {
@@ -1557,11 +1556,6 @@ const buildLearningBlocks = (material: StudyMaterial): StudyMaterial['learningBl
   ];
 };
 
-export const STUDY_MATERIALS: StudyMaterial[] = LEGACY_STUDY_MATERIALS.map(material => ({
-  ...material,
-  learningBlocks: buildLearningBlocks(material),
-}));
-
 const buildStudyBlocks = (material: Omit<StudyMaterial, 'studyBlocks' | 'priority' | 'scoreImpact' | 'quick30sSummary' | 'revisionNotes'>) => [
   {
     id: `${material.id}-core`,
@@ -1612,7 +1606,8 @@ export const STUDY_MATERIALS: StudyMaterial[] = BASE_STUDY_MATERIALS.map((materi
       'Review 2: kerjakan checkpoint tanpa lihat catatan pada hari ke-3.',
       'Review 3: ulang soal variasi pada hari ke-7 dan catat pola salah.'
     ],
-    studyBlocks: buildStudyBlocks(material)
+    studyBlocks: buildStudyBlocks(material),
+    learningBlocks: buildLearningBlocks(material as StudyMaterial)
   };
 });
 export const findMaterialByConcept = (concept: string): StudyMaterial | undefined =>

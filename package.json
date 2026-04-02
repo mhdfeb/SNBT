@@ -10,7 +10,9 @@
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit",
     "quality:validate": "tsx scripts/validate-quality-gate.ts",
-    "validate:blueprint": "tsx scripts/validate-question-blueprint.ts"
+    "validate:blueprint": "tsx scripts/validate-question-blueprint.ts",
+    "typecheck": "tsc --noEmit",
+    "quality:local": "npm run typecheck && npm run build"
   },
   "dependencies": {
     "@google/genai": "^1.29.0",
