@@ -4,6 +4,12 @@ import { useQuiz } from './hooks/useQuiz';
 import { QUESTIONS } from './data/questions';
 import type { Question, QuestionAnswer } from './types/quiz';
 
+const parseShortAnswer = (value: string): QuestionAnswer => {
+  if (value.trim() === '') return null;
+  const parsedValue = Number(value);
+  return Number.isFinite(parsedValue) ? parsedValue : null;
+};
+
 function QuestionCard({
   question,
   answer,
@@ -24,7 +30,7 @@ function QuestionCard({
           className="w-full rounded-lg border border-slate-300 p-3"
           value={typeof answer === 'number' ? answer : ''}
           disabled={submitted}
-          onChange={(e) => onAnswer(Number(e.target.value))}
+          onChange={(e) => onAnswer(parseShortAnswer(e.target.value))}
           placeholder="Masukkan jawaban"
         />
       </div>
