@@ -1,0 +1,23 @@
+<svg width="640" height="360" viewBox="0 0 640 360" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="mathTitle mathDesc">
+  <title id="mathTitle">Skema penalaran matematika</title>
+  <desc id="mathDesc">Visual tahap matematika: modelkan variabel, hitung efisien, lalu uji batas hasil.</desc>
+  <rect width="640" height="360" rx="28" fill="#ECFDF5"/>
+  <rect x="44" y="44" width="552" height="272" rx="24" fill="white"/>
+  <rect x="74" y="84" width="172" height="180" rx="16" fill="#D1FAE5"/>
+  <rect x="262" y="84" width="172" height="180" rx="16" fill="#A7F3D0"/>
+  <rect x="450" y="84" width="116" height="180" rx="16" fill="#6EE7B7"/>
+  <text x="90" y="118" fill="#065F46" font-size="16" font-family="Inter, Arial" font-weight="700">Model</text>
+  <text x="90" y="142" fill="#065F46" font-size="12" font-family="Inter, Arial">x = variabel inti</text>
+  <text x="90" y="162" fill="#065F46" font-size="12" font-family="Inter, Arial">y = syarat soal</text>
+  <text x="278" y="118" fill="#065F46" font-size="16" font-family="Inter, Arial" font-weight="700">Hitung</text>
+  <text x="278" y="142" fill="#065F46" font-size="12" font-family="Inter, Arial">Gunakan bentuk sederhana</text>
+  <text x="278" y="162" fill="#065F46" font-size="12" font-family="Inter, Arial">Bandingkan opsi</text>
+  <text x="466" y="118" fill="#064E3B" font-size="16" font-family="Inter, Arial" font-weight="700">Uji</text>
+  <text x="466" y="142" fill="#064E3B" font-size="12" font-family="Inter, Arial">Masuk akal?</text>
+  <path d="M246 174H262" stroke="#10B981" stroke-width="4" stroke-linecap="round"/>
+  <path d="M434 174H450" stroke="#10B981" stroke-width="4" stroke-linecap="round"/>
+  <path d="M96 222C132 194 188 212 224 182" stroke="#047857" stroke-width="4" stroke-linecap="round"/>
+  <circle cx="96" cy="222" r="6" fill="#047857"/>
+  <circle cx="224" cy="182" r="6" fill="#047857"/>
+  <text x="84" y="286" fill="#065F46" font-size="14" font-family="Inter, Arial" font-weight="700">Cheat: cek satuan & batas nilai.</text>
+</svg>

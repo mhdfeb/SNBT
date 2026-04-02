@@ -29,6 +29,10 @@ import { formatTime, cn } from './lib/utils';
 import { Difficulty, Category, Question, AssessmentReport, StudyMaterial, QuizSession } from './types/quiz';
 import { STUDY_MATERIALS, findMaterialByConcept } from './data/materials';
 import ReactMarkdown from 'react-markdown';
+import visualTPS from './assets/visuals/style-pack-tps.svg';
+import visualLiterasi from './assets/visuals/style-pack-literasi.svg';
+import visualMatematika from './assets/visuals/style-pack-matematika.svg';
+import visualReport from './assets/visuals/style-pack-report.svg';
 import { 
   BarChart, 
   Bar, 
@@ -1004,6 +1008,19 @@ export default function App() {
             </div>
           </div>
 
+          <section className="bg-white rounded-[48px] border border-slate-200 p-6 md:p-8 shadow-sm space-y-5">
+            <div className="flex items-center justify-between gap-4 flex-wrap">
+              <h3 className="text-xl font-black text-slate-900">Cheat-Sheet Strategi 7 Hari</h3>
+              <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Visual Report Pack</p>
+            </div>
+            <img
+              src={visualReport}
+              alt="Diagram strategi belajar 7 hari yang membagi prioritas TPS, literasi, dan matematika berdasarkan hasil report."
+              loading="lazy"
+              decoding="async"
+              className="w-full rounded-[28px] border border-slate-200 bg-slate-900"
+            />
+          </section>
           <div className="bg-white rounded-[40px] p-8 border border-slate-200 shadow-sm space-y-6">
             <h3 className="text-2xl font-black text-slate-900">3 Konsep Prioritas Lemah</h3>
             <div className="grid md:grid-cols-3 gap-4">
@@ -1295,6 +1312,29 @@ export default function App() {
     'Penalaran Matematika': { label: 'Matematika', color: 'text-emerald-700', bg: 'bg-emerald-600', icon: <BarChart3 size={18} />, desc: 'Penalaran Matematika' },
   };
 
+  const CATEGORY_VISUALS: Record<string, { src: string; alt: string; points: string[] }> = {
+    TPS: {
+      src: visualTPS,
+      alt: 'Diagram langkah berpikir TPS mulai dari mengenali pola, eliminasi opsi, hingga validasi jawaban akhir.',
+      points: ['Kenali pola inti cepat', 'Eliminasi opsi kontradiktif', 'Validasi dengan konteks soal'],
+    },
+    'Literasi Indonesia': {
+      src: visualLiterasi,
+      alt: 'Contoh anotasi bacaan literasi Indonesia untuk menemukan gagasan utama, bukti, dan inferensi.',
+      points: ['Tandai tesis penulis', 'Cari bukti eksplisit', 'Tarik inferensi implisit'],
+    },
+    'Literasi Inggris': {
+      src: visualLiterasi,
+      alt: 'Cheat-sheet literasi Inggris untuk active reading, menemukan claim, evidence, dan inference.',
+      points: ['Scan kata kunci paragraf', 'Bedakan fakta dan opini', 'Verifikasi inference dengan bukti'],
+    },
+    'Penalaran Matematika': {
+      src: visualMatematika,
+      alt: 'Skema penalaran matematika: model variabel, hitung efisien, lalu uji batas hasil.',
+      points: ['Modelkan variabel utama', 'Gunakan bentuk hitung sederhana', 'Cek satuan dan batas nilai'],
+    },
+  };
+
   const filteredMaterials = STUDY_MATERIALS.filter(m =>
     categoryFilter === 'All' || m.category === categoryFilter
   );
@@ -1307,8 +1347,9 @@ export default function App() {
       <div className="relative overflow-hidden bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900">
         <img
           src="https://images.unsplash.com/photo-1481627834876-b7833e8f5882?auto=format&fit=crop&w=1400&q=60"
-          alt="Library"
+          alt="Foto perpustakaan sebagai hero branding layar belajar"
           className="absolute inset-0 w-full h-full object-cover opacity-20"
+          fetchPriority="high"
         />
         <div className="relative max-w-6xl mx-auto px-6 py-14 flex flex-col md:flex-row items-center gap-10">
           <div className="flex-1 space-y-5">
@@ -1342,8 +1383,10 @@ export default function App() {
             <div className="w-64 h-64 bg-white/5 rounded-[40px] border border-white/10 flex items-center justify-center relative overflow-hidden">
               <img
                 src="https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&w=400&q=70"
-                alt="Study"
+                alt="Siswa belajar sebagai visual branding belajar mandiri"
                 className="w-full h-full object-cover rounded-[40px] opacity-60"
+                loading="lazy"
+                decoding="async"
               />
               <div className="absolute inset-0 bg-gradient-to-t from-indigo-900/70 to-transparent rounded-[40px]" />
               <div className="absolute bottom-6 left-6 right-6">
@@ -1442,6 +1485,34 @@ export default function App() {
           )}
         </div>
 
+        <div className="space-y-5">
+          <div className="flex items-center justify-between gap-4 flex-wrap">
+            <h3 className="text-2xl font-black text-slate-900">Visual Proses Berpikir per Kategori</h3>
+            <p className="text-xs font-bold uppercase tracking-widest text-slate-500">Style Pack Konsisten</p>
+          </div>
+          <div className="grid lg:grid-cols-3 gap-6">
+            {Object.entries(CATEGORY_VISUALS).map(([name, visual]) => (
+              <article key={name} className="bg-white rounded-[30px] border border-slate-200 shadow-sm overflow-hidden">
+                <img
+                  src={visual.src}
+                  alt={visual.alt}
+                  loading="lazy"
+                  decoding="async"
+                  className="w-full h-44 object-cover border-b border-slate-100"
+                />
+                <div className="p-6 space-y-3">
+                  <h4 className="font-black text-slate-900">{name}</h4>
+                  <ul className="space-y-1.5">
+                    {visual.points.map((point) => (
+                      <li key={point} className="text-sm text-slate-600 font-medium">• {point}</li>
+                    ))}
+                  </ul>
+                </div>
+              </article>
+            ))}
+          </div>
+        </div>
+
         {/* Selected Material Detail */}
         {selectedMaterial && (
           <div className="fixed inset-0 z-50 overflow-y-auto bg-[#f0f4ff]">
@@ -1460,8 +1531,10 @@ export default function App() {
                         ? 'https://images.unsplash.com/photo-1457369804613-52c61a468e7d?auto=format&fit=crop&w=1000&q=60'
                         : 'https://images.unsplash.com/photo-1509228468518-180dd4864904?auto=format&fit=crop&w=1000&q=60'
                     }
-                    alt={selectedMaterial.category}
+                    alt={`Visual pendukung materi ${selectedMaterial.category} untuk topik ${selectedMaterial.title}`}
                     className="absolute inset-0 w-full h-full object-cover"
+                    loading="lazy"
+                    decoding="async"
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-slate-900 via-slate-900/70 to-transparent" />
                   <div className="relative z-10 p-10 space-y-4 w-full">
