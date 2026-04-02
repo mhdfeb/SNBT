@@ -13,6 +13,7 @@ export interface SubTestConfig {
   questionCount: number;
   timeLimitSec: number;
   category?: Category;
+  selector?: (question: Question) => boolean;
 }
 
 const PRODUCT_SUBTEST_CONFIG: SubTestConfig[] = [
@@ -82,7 +83,7 @@ const takeWithFallback = (preferredPool: Question[], fallbackPool: Question[], c
 };
 
 export const buildSubTestConfig = (mode: QuizSession['mode']): SubTestConfig[] => {
-  if (mode === 'tryout' || mode === 'simulation') return DEFAULT_SUBTEST_CONFIG;
+  if (mode === 'tryout' || mode === 'simulation') return GOVERNANCE_SUBTEST_CONFIG;
   return [];
 };
 
@@ -112,10 +113,11 @@ export const pickQuestionsByMode = (
     const selected: Question[] = [];
 
     for (const subTest of subTestConfig) {
-      const perCategoryPool =
-        subTest.category === undefined
-          ? basePool
-          : basePool.filter((question) => question.category === subTest.category);
+      const perCategoryPool = basePool.filter((question) => {
+        if (subTest.category !== undefined && question.category !== subTest.category) return false;
+        if (subTest.selector && !subTest.selector(question)) return false;
+        return true;
+      });
 
       const cleanCategoryPool = perCategoryPool.filter((question) => !usedQuestionIds.has(question.id));
       const cleanFallbackPool = mixed.filter((question) => !usedQuestionIds.has(question.id));

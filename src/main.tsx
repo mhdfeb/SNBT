@@ -35,6 +35,15 @@ window.addEventListener('unhandledrejection', (event) => {
   });
 });
 
+
+if (import.meta.env.DEV) {
+  const report = validateAllDataSchemas();
+  if (report.issues.length > 0) {
+    const details = report.issues.map((issue) => `${issue.entity}#${issue.id}.${issue.field}`).join(', ');
+    throw new Error(`Data schema validation failed on startup: ${details}`);
+  }
+}
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <ErrorBoundary>

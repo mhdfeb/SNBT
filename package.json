@@ -4,8 +4,8 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite --port=5000 --host=0.0.0.0",
-    "build": "vite build",
+    "dev": "npm run validate:data && vite --port=5000 --host=0.0.0.0",
+    "build": "npm run validate:data && vite build",
     "vercel-build": "npm run build",
     "preview": "vite preview",
     "clean": "rm -rf dist",
@@ -13,7 +13,8 @@
     "quality:validate": "tsx scripts/validate-quality-gate.ts",
     "validate:blueprint": "tsx scripts/validate-question-blueprint.ts",
     "typecheck": "tsc --noEmit",
-    "quality:local": "npm run typecheck && npm run build"
+    "quality:local": "npm run typecheck && npm run build",
+    "validate:data": "tsx scripts/validate-data-schema.ts"
   },
   "dependencies": {
     "@google/genai": "^1.29.0",
