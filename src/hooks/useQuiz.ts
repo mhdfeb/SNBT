@@ -3,8 +3,11 @@ import { Question, UserProgress, QuizSession, Difficulty, Category, AssessmentRe
 import { QUESTIONS } from '../data/questions';
 import { applyTryoutEquating, calculateIRTScore, getNationalStats } from '../lib/irt';
 import { PTN_DATA } from '../data/ptn';
+import { STUDY_MATERIALS } from '../data/materials';
 
 const STORAGE_KEY = 'ppu_master_progress_v3';
+
+type MaterialMasteryAccumulator = { [concept: string]: { correct: number; total: number } };
 
 const INITIAL_PROGRESS: UserProgress = {
   completedIds: [],
@@ -55,13 +58,55 @@ function evaluateQuestionFlags(stat: QuestionPerformanceStat): string[] {
 
   return flags;
 }
+const normalizeConcept = (value: string) => value.toLowerCase().replace(/\s+/g, ' ').trim();
+
+const findMaterialForConcept = (concept: string) => {
+  const normalized = normalizeConcept(concept);
+  return STUDY_MATERIALS.find(material => {
+    const materialConcept = normalizeConcept(material.concept);
+    return materialConcept === normalized || materialConcept.includes(normalized) || normalized.includes(materialConcept);
+  });
+};
 
 export function useQuiz() {
+  const migrateMaterialMastery = (rawMastery: unknown): MaterialMasteryAccumulator => {
+    if (!rawMastery || typeof rawMastery !== 'object') return {};
+
+    const migrated: MaterialMasteryAccumulator = {};
+    Object.entries(rawMastery as Record<string, unknown>).forEach(([concept, value]) => {
+      if (typeof value === 'number') {
+        const safePercent = Math.max(0, Math.min(100, Math.round(value)));
+        migrated[concept] = { correct: safePercent, total: 100 };
+        return;
+      }
+
+      if (
+        value &&
+        typeof value === 'object' &&
+        'correct' in value &&
+        'total' in value &&
+        typeof (value as { correct: unknown }).correct === 'number' &&
+        typeof (value as { total: unknown }).total === 'number'
+      ) {
+        migrated[concept] = {
+          correct: Math.max(0, Math.round((value as { correct: number }).correct)),
+          total: Math.max(0, Math.round((value as { total: number }).total)),
+        };
+      }
+    });
+
+    return migrated;
+  };
+
   const [progress, setProgress] = useState<UserProgress>(() => {
     const saved = localStorage.getItem(STORAGE_KEY);
     if (saved) {
       const parsed = JSON.parse(saved);
-      return { ...INITIAL_PROGRESS, ...parsed, materialMastery: parsed.materialMastery ?? {} };
+      return {
+        ...INITIAL_PROGRESS,
+        ...parsed,
+        materialMastery: migrateMaterialMastery(parsed.materialMastery),
+      };
     }
     return INITIAL_PROGRESS;
   });
@@ -299,6 +344,12 @@ export function useQuiz() {
       concept: q.concept,
       irtParams: q.irtParams,
     }));
+    const conceptStats = results.reduce((acc, result) => {
+      if (!acc[result.concept]) acc[result.concept] = { total: 0, correct: 0 };
+      acc[result.concept].total += 1;
+      if (result.correct) acc[result.concept].correct += 1;
+      return acc;
+    }, {} as Record<string, { total: number; correct: number }>);
 
     const correctCount = results.filter(r => r.correct).length;
     const today = new Date().toISOString().split('T')[0];
@@ -327,17 +378,14 @@ export function useQuiz() {
       }
     });
 
-    // Material Mastery
-    const materialMastery: any = {};
+    // Material Mastery (session accumulator)
+    const sessionMastery: MaterialMasteryAccumulator = {};
     results.forEach(r => {
-      if (!materialMastery[r.concept]) {
-        materialMastery[r.concept] = { correct: 0, total: 0 };
+      if (!sessionMastery[r.concept]) {
+        sessionMastery[r.concept] = { correct: 0, total: 0 };
       }
-      materialMastery[r.concept].total += 1;
-      if (r.correct) materialMastery[r.concept].correct += 1;
-    });
-    Object.keys(materialMastery).forEach(key => {
-      materialMastery[key] = Math.round((materialMastery[key].correct / (materialMastery[key].total || 1)) * 100);
+      sessionMastery[r.concept].total += 1;
+      if (r.correct) sessionMastery[r.concept].correct += 1;
     });
 
     // Rationalization Logic
@@ -368,8 +416,22 @@ export function useQuiz() {
       nationalRank: rank,
       totalParticipants,
       percentile,
-      materialMastery,
+      materialMastery: {} as AssessmentReport['materialMastery'],
       recommendations
+      materialMastery,
+      recommendations,
+      remedialConcepts: Object.entries(conceptStats)
+        .map(([concept, stats]) => {
+          const accuracy = Math.round((stats.correct / (stats.total || 1)) * 100);
+          const matchedMaterial = findMaterialForConcept(concept);
+          return {
+            concept,
+            accuracy,
+            materialId: matchedMaterial?.id,
+          };
+        })
+        .sort((a, b) => a.accuracy - b.accuracy)
+        .slice(0, 3)
     };
 
     setProgress(prev => {
@@ -463,6 +525,25 @@ export function useQuiz() {
         else if (newDifficulty === 'medium') newDifficulty = 'easy';
       }
 
+      const aggregateMastery = { ...(prev.materialMastery ?? {}) };
+      Object.entries(sessionMastery).forEach(([concept, sessionValue]) => {
+        const previous = aggregateMastery[concept] ?? { correct: 0, total: 0 };
+        aggregateMastery[concept] = {
+          correct: previous.correct + sessionValue.correct,
+          total: previous.total + sessionValue.total,
+        };
+      });
+
+      const reportMaterialMastery: AssessmentReport['materialMastery'] = {} as AssessmentReport['materialMastery'];
+      Object.entries(aggregateMastery).forEach(([concept, value]) => {
+        reportMaterialMastery[concept as keyof AssessmentReport['materialMastery']] = Math.round((value.correct / (value.total || 1)) * 100);
+      });
+
+      const mergedReport: AssessmentReport = {
+        ...report,
+        materialMastery: reportMaterialMastery,
+      };
+
       return {
         ...prev,
         completedIds: newCompletedIds,
@@ -474,7 +555,10 @@ export function useQuiz() {
         },
         categoryStats: updatedStats,
         currentDifficulty: newDifficulty,
+        materialMastery: aggregateMastery,
+        reports: [mergedReport, ...prev.reports].slice(0, 10),
         materialMastery: { ...(prev.materialMastery ?? {}), ...materialMastery },
+        lastRemedialConcepts: report.remedialConcepts ?? [],
         reports: [report, ...prev.reports].slice(0, 10),
         questionPerformance: nextQuestionPerformance,
       };
