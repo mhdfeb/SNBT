@@ -144,7 +144,8 @@ export const calculateSessionReport = (session: QuizSession, progress: UserProgr
   });
 
   const totalScore = Math.round(clamp(200 + accuracy * 600, 200, 800));
-  const recentReports = [...progress.reports].slice(-7);
+  const mostRecentReports = progress.reports.slice(0, 7);
+  const recentReports = [...mostRecentReports].reverse();
 
   const readinessBySubTest = CATEGORIES.map((category) => {
     const historyScores = [...getSubTestHistoryScores(recentReports, category), categoryScores[category]];
