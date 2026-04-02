@@ -299,12 +299,15 @@ export default function App() {
     nextSubTest,
     toggleMark,
     setSession,
+    updateConceptMasteryFromCheckpoint
     markMaterialRead
   } = useQuiz();
 
   const [view, setView] = useState<'dashboard' | 'quiz' | 'analytics' | 'report' | 'study'>('dashboard');
   const [selectedReport, setSelectedReport] = useState<AssessmentReport | null>(null);
   const [selectedMaterial, setSelectedMaterial] = useState<StudyMaterial | null>(null);
+  const [activeBlockIdx, setActiveBlockIdx] = useState(0);
+  const [checkpointScores, setCheckpointScores] = useState<Record<string, number>>({});
   const [revealedCheckpointAnswers, setRevealedCheckpointAnswers] = useState<Record<string, boolean>>({});
   const [activeRemedialCycleId, setActiveRemedialCycleId] = useState<string | null>(null);
 
@@ -321,6 +324,11 @@ export default function App() {
     const normalizedConcept = concept.toLowerCase().trim();
     return STUDY_MATERIALS.find(material => material.concept.toLowerCase().trim() === normalizedConcept);
   };
+
+  useEffect(() => {
+    setActiveBlockIdx(0);
+    setCheckpointScores({});
+  }, [selectedMaterial?.id]);
 
   const getModeName = (mode: string) => {
     switch(mode) {
@@ -1443,6 +1451,18 @@ export default function App() {
   );
 
   const getReadingTime = (content: string) => Math.max(2, Math.ceil(content.split(' ').length / 200));
+  const checkpointScale = [
+    { label: 'Belum Yakin', value: 30 },
+    { label: 'Lumayan', value: 70 },
+    { label: 'Siap Kuis', value: 100 },
+  ];
+
+  const getBlockCheckpointAverage = (material: StudyMaterial, blockIdx: number) => {
+    const block = material.learningBlocks[blockIdx];
+    const scores = block.checkpoints.map(item => checkpointScores[item.id]).filter((v): v is number => typeof v === 'number');
+    if (!scores.length) return 0;
+    return Math.round(scores.reduce((a, b) => a + b, 0) / scores.length);
+  };
   const getPriorityLabel = (priority?: StudyMaterial['priority']) => priority ?? 'medium';
 
   const StudyView = () => (
@@ -1712,6 +1732,91 @@ export default function App() {
                     </p>
                   </div>
 
+                  {/* Modular Blocks */}
+                  <div className="space-y-6">
+                    <div className="bg-white border border-slate-200 rounded-3xl p-6 space-y-3">
+                      <div className="flex items-center justify-between text-xs font-black uppercase tracking-widest text-slate-500">
+                        <span>Progress Materi Bertahap</span>
+                        <span>{Math.min(activeBlockIdx + 1, selectedMaterial.learningBlocks.length)}/{selectedMaterial.learningBlocks.length} blok</span>
+                      </div>
+                      <ProgressBar current={Math.min(activeBlockIdx + 1, selectedMaterial.learningBlocks.length)} total={selectedMaterial.learningBlocks.length} />
+                    </div>
+
+                    {selectedMaterial.learningBlocks.map((block, idx) => {
+                      const isActive = idx === activeBlockIdx;
+                      const isDone = idx < activeBlockIdx;
+                      const checkpointDone = block.checkpoints.every(item => typeof checkpointScores[item.id] === 'number');
+                      const blockScore = getBlockCheckpointAverage(selectedMaterial, idx);
+                      return (
+                        <div key={block.id} className={cn("rounded-[28px] border p-7 space-y-5 transition-all", isActive ? "bg-indigo-50 border-indigo-200" : "bg-white border-slate-200")}>
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <p className="text-xs font-black uppercase tracking-widest text-slate-500">Blok {idx + 1} • {block.type.replace('_', ' ')}</p>
+                              <h4 className="text-2xl font-black text-slate-900">{block.title}</h4>
+                            </div>
+                            {isDone && <CheckCircle2 className="text-green-600" />}
+                          </div>
+
+                          {(isActive || isDone) && (
+                            <>
+                              <div className="prose prose-slate max-w-none text-slate-700">
+                                <ReactMarkdown>{block.content}</ReactMarkdown>
+                              </div>
+                              <div className="bg-slate-50 border border-slate-200 rounded-2xl p-5 space-y-4">
+                                <p className="text-xs font-black uppercase tracking-widest text-slate-500">Mini Checkpoint (2-3 item)</p>
+                                {block.checkpoints.map((checkpoint) => (
+                                  <div key={checkpoint.id} className="space-y-2">
+                                    <p className="text-sm font-semibold text-slate-700">{checkpoint.prompt}</p>
+                                    <div className="flex flex-wrap gap-2">
+                                      {checkpointScale.map((scale) => (
+                                        <button
+                                          key={scale.label}
+                                          onClick={() => isActive && setCheckpointScores(prev => ({ ...prev, [checkpoint.id]: scale.value }))}
+                                          disabled={!isActive}
+                                          className={cn(
+                                            "px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors",
+                                            checkpointScores[checkpoint.id] === scale.value
+                                              ? "bg-indigo-600 text-white border-indigo-600"
+                                              : "bg-white text-slate-600 border-slate-300 hover:border-indigo-300"
+                                          )}
+                                        >
+                                          {scale.label}
+                                        </button>
+                                      ))}
+                                    </div>
+                                  </div>
+                                ))}
+                                <div className="flex items-center justify-between pt-2">
+                                  <p className="text-xs text-slate-500 font-semibold">Skor checkpoint blok: <span className="text-slate-800">{blockScore}%</span></p>
+                                  {isActive && (
+                                    <button
+                                      onClick={() => {
+                                        if (!checkpointDone) return;
+                                        updateConceptMasteryFromCheckpoint(selectedMaterial.concept, blockScore);
+                                        if (idx < selectedMaterial.learningBlocks.length - 1) setActiveBlockIdx(idx + 1);
+                                      }}
+                                      disabled={!checkpointDone}
+                                      className={cn(
+                                        "px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest",
+                                        checkpointDone ? "bg-indigo-600 text-white" : "bg-slate-200 text-slate-400 cursor-not-allowed"
+                                      )}
+                                    >
+                                      {idx === selectedMaterial.learningBlocks.length - 1 ? 'Selesai Blok' : 'Lanjut Blok'}
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      );
+                    })}
+
+                    <div className="bg-amber-50 border border-amber-200 rounded-[28px] p-7 space-y-3">
+                      <p className="text-xs font-black uppercase tracking-widest text-amber-700">Mode Pengulangan Cepat • 30–60 detik</p>
+                      <p className="text-amber-900 font-semibold">
+                        {selectedMaterial.learningBlocks.find(block => block.type === 'quick_drill')?.quickRevision ?? 'Baca ringkasan, sebutkan 1 jebakan umum, lalu jawab 1 soal cepat.'}
+                      </p>
                   <div className="grid md:grid-cols-2 gap-5">
                     <div className="bg-slate-50 rounded-3xl border border-slate-200 p-6">
                       <p className="text-[11px] font-black uppercase tracking-widest text-slate-500 mb-2">Ringkasan 30 Detik</p>

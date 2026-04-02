@@ -1,5 +1,6 @@
 import { StudyMaterial } from '../types/quiz';
 
+const LEGACY_STUDY_MATERIALS: StudyMaterial[] = [
 const PRIORITY_ORDER: StudyMaterial['priority'][] = ['high', 'medium', 'low'];
 
 const getPriorityMeta = (index: number) => {
@@ -1488,6 +1489,78 @@ Teks akademik disajikan bersama **grafik, tabel, atau diagram** → soal menggab
     ]
   }
 ];
+
+type LearningBlockType = 'core_concept' | 'worked_example' | 'common_trap' | 'quick_drill';
+
+const BLOCK_LABEL: Record<LearningBlockType, string> = {
+  core_concept: 'Konsep Inti',
+  worked_example: 'Worked Example',
+  common_trap: 'Common Trap',
+  quick_drill: 'Quick Drill',
+};
+
+const toBulletItems = (text: string, fallback: string[]): string[] => {
+  const matches = Array.from(text.matchAll(/(?:^-|^\*|^\d+\.)\s+(.+)$/gm)).map(m => m[1].trim()).filter(Boolean);
+  return matches.length >= 2 ? matches.slice(0, 4) : fallback;
+};
+
+const buildLearningBlocks = (material: StudyMaterial): StudyMaterial['learningBlocks'] => {
+  const bullets = toBulletItems(material.fullContent, [
+    `Fokus pada poin kunci ${material.concept}.`,
+    'Gunakan eliminasi jawaban untuk menghemat waktu.',
+    'Catat pola soal yang sering berulang.',
+    'Review error umum sebelum mengerjakan soal berikutnya.',
+  ]);
+
+  return [
+    {
+      id: `${material.id}-core`,
+      type: 'core_concept',
+      title: `${BLOCK_LABEL.core_concept}: ${material.concept}`,
+      content: material.summary,
+      checkpoints: [
+        { id: `${material.id}-core-c1`, prompt: 'Pilih strategi utama untuk tipe soal ini.', focus: 'strategi' },
+        { id: `${material.id}-core-c2`, prompt: 'Identifikasi indikator kapan strategi dipakai.', focus: 'trigger' },
+      ],
+    },
+    {
+      id: `${material.id}-example`,
+      type: 'worked_example',
+      title: BLOCK_LABEL.worked_example,
+      content: bullets.slice(0, 2).map((item, i) => `${i + 1}. ${item}`).join('\n'),
+      checkpoints: [
+        { id: `${material.id}-ex-c1`, prompt: 'Urutkan langkah penyelesaian paling efisien.', focus: 'langkah' },
+        { id: `${material.id}-ex-c2`, prompt: 'Tentukan alasan langkah kritis di worked example.', focus: 'alasan' },
+      ],
+    },
+    {
+      id: `${material.id}-trap`,
+      type: 'common_trap',
+      title: BLOCK_LABEL.common_trap,
+      content: bullets.slice(2, 4).map(item => `- ${item}`).join('\n'),
+      checkpoints: [
+        { id: `${material.id}-trap-c1`, prompt: 'Pilih jebakan yang paling sering bikin salah.', focus: 'jebakan' },
+        { id: `${material.id}-trap-c2`, prompt: 'Tentukan tindakan pencegahan saat menemukan jebakan.', focus: 'mitigasi' },
+      ],
+    },
+    {
+      id: `${material.id}-drill`,
+      type: 'quick_drill',
+      title: BLOCK_LABEL.quick_drill,
+      content: 'Latihan 30-60 detik: sebutkan langkah, cek jebakan, lalu jawab cepat.',
+      checkpoints: [
+        { id: `${material.id}-drill-c1`, prompt: 'Nilai kesiapan menjawab cepat (<60 detik).', focus: 'kecepatan' },
+        { id: `${material.id}-drill-c2`, prompt: 'Konfirmasi akurasi setelah speed drill.', focus: 'akurasi' },
+      ],
+      quickRevision: 'Mode ulang cepat 30–60 detik: baca ringkasan, recall 1 jebakan, kerjakan 1 soal mental.',
+    },
+  ];
+};
+
+export const STUDY_MATERIALS: StudyMaterial[] = LEGACY_STUDY_MATERIALS.map(material => ({
+  ...material,
+  learningBlocks: buildLearningBlocks(material),
+}));
 
 const buildStudyBlocks = (material: Omit<StudyMaterial, 'studyBlocks' | 'priority' | 'scoreImpact' | 'quick30sSummary' | 'revisionNotes'>) => [
   {

@@ -1245,6 +1245,20 @@ export function useQuiz() {
     });
   };
 
+  const updateConceptMasteryFromCheckpoint = useCallback((concept: string, scorePercent: number) => {
+    const boundedScore = Math.max(0, Math.min(100, Math.round(scorePercent)));
+    setProgress(prev => {
+      const prevMastery = prev.materialMastery?.[concept] ?? 0;
+      const blended = Math.round((prevMastery * 0.65) + (boundedScore * 0.35));
+      return {
+        ...prev,
+        materialMastery: {
+          ...(prev.materialMastery ?? {}),
+          [concept]: blended,
+        },
+      };
+    });
+  }, []);
   const markMaterialRead = (cycleId: string) => {
     setProgress(prev => ({
       ...prev,
@@ -1267,6 +1281,7 @@ export function useQuiz() {
     nextSubTest,
     toggleMark,
     setSession,
+    updateConceptMasteryFromCheckpoint,
     markMaterialRead,
   };
 }
