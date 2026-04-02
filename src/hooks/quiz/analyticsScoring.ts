@@ -58,7 +58,7 @@ export const calculateSessionReport = (session: QuizSession, progress: UserProgr
   } as AssessmentReport;
 };
 
-const isAnswerCorrect = (question: Question, answer: unknown): boolean => {
+export const isAnswerCorrect = (question: Question, answer: unknown): boolean => {
   if (answer === undefined || answer === null) return false;
 
   if (question.type === 'multiple_choice') {

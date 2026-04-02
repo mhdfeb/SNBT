@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { QUESTIONS } from '../data/questions';
 import type { AssessmentReport, Category, Concept, QuizSession, TargetedDrillResult, UserProgress, UserTarget } from '../types/quiz';
-import { calculateSessionReport } from './quiz/analyticsScoring';
+import { calculateSessionReport, isAnswerCorrect } from './quiz/analyticsScoring';
 import { loadProgressFromStorage, STORAGE_KEY } from './quiz/progressMigration';
 import { pickQuestionsByMode } from './quiz/questionSelection';
 
@@ -115,12 +115,7 @@ export function useQuiz() {
       const newCompletedIds = Array.from(new Set([...prev.completedIds, ...session.questions.map((q) => q.id)]));
       const perQuestionResult = session.questions.map((q) => {
         const answer = session.answers[q.id];
-        const isCorrect =
-          q.type === 'multiple_choice'
-            ? answer === q.correctAnswer
-            : q.type === 'short_answer'
-              ? Number(answer) === Number(q.shortAnswerCorrect)
-              : false;
+        const isCorrect = isAnswerCorrect(q, answer);
         return { questionId: q.id, isCorrect };
       });
       const wrongIds = perQuestionResult.filter((item) => !item.isCorrect).map((item) => item.questionId);
