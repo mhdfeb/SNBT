@@ -233,7 +233,7 @@ export function useQuiz() {
           }
 
           const baselineScore = cycle.baselineScore ?? conceptScore;
-          const status = (conceptScore >= baselineScore ? 'completed' : 'needs_continue') as const;
+          const status: 'completed' | 'needs_continue' = conceptScore >= baselineScore ? 'completed' : 'needs_continue';
           return {
             ...cycle,
             afterScore: conceptScore,

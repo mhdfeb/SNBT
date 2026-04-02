@@ -1,3 +1,4 @@
+import { SUBTEST_BLUEPRINTS, resolveSubtest } from '../../data/questionGovernance';
 import type { Category, Question, QuizSession, UserProgress } from '../../types/quiz';
 
 const shuffle = <T,>(items: T[]): T[] => [...items].sort(() => Math.random() - 0.5);
@@ -9,14 +10,28 @@ export interface SubTestConfig {
   questionCount: number;
   timeLimitSec: number;
   category?: Category;
+  selector?: (question: Question) => boolean;
 }
 
-const DEFAULT_SUBTEST_CONFIG: SubTestConfig[] = [
-  { name: 'TPS', questionCount: 30, timeLimitSec: 30 * 60, category: 'TPS' },
-  { name: 'Literasi Indonesia', questionCount: 20, timeLimitSec: 20 * 60, category: 'Literasi Indonesia' },
-  { name: 'Literasi Inggris', questionCount: 20, timeLimitSec: 20 * 60, category: 'Literasi Inggris' },
-  { name: 'Penalaran Matematika', questionCount: 20, timeLimitSec: 20 * 60, category: 'Penalaran Matematika' },
-];
+const PRODUCT_SUBTEST_TIME_LIMITS: Record<string, number> = {
+  'Penalaran Induktif': 10 * 60,
+  'Penalaran Deduktif': 10 * 60,
+  'Penalaran Kuantitatif': 10 * 60,
+  'Pengetahuan & Pemahaman Umum': 15 * 60,
+  'Pemahaman Bacaan & Menulis': 25 * 60,
+  'Pengetahuan Kuantitatif': 15 * 60,
+  'Literasi Bahasa Indonesia': 35 * 60,
+  'Literasi Bahasa Inggris': 25 * 60,
+  'Penalaran Matematika': 25 * 60,
+};
+
+const GOVERNANCE_SUBTEST_CONFIG: SubTestConfig[] = SUBTEST_BLUEPRINTS.map((blueprint) => ({
+  name: blueprint.subtest,
+  questionCount: blueprint.quota,
+  timeLimitSec: PRODUCT_SUBTEST_TIME_LIMITS[blueprint.subtest] ?? blueprint.quota * 60,
+  category: blueprint.category,
+  selector: (question) => resolveSubtest(question) === blueprint.subtest,
+}));
 
 const takeWithFallback = (preferredPool: Question[], fallbackPool: Question[], count: number): Question[] => {
   const preferred = take(shuffle(preferredPool), count);
@@ -28,7 +43,7 @@ const takeWithFallback = (preferredPool: Question[], fallbackPool: Question[], c
 };
 
 export const buildSubTestConfig = (mode: QuizSession['mode']): SubTestConfig[] => {
-  if (mode === 'tryout' || mode === 'simulation') return DEFAULT_SUBTEST_CONFIG;
+  if (mode === 'tryout' || mode === 'simulation') return GOVERNANCE_SUBTEST_CONFIG;
   return [];
 };
 
@@ -58,10 +73,11 @@ export const pickQuestionsByMode = (
     const selected: Question[] = [];
 
     for (const subTest of subTestConfig) {
-      const perCategoryPool =
-        subTest.category === undefined
-          ? basePool
-          : basePool.filter((question) => question.category === subTest.category);
+      const perCategoryPool = basePool.filter((question) => {
+        if (subTest.category !== undefined && question.category !== subTest.category) return false;
+        if (subTest.selector && !subTest.selector(question)) return false;
+        return true;
+      });
 
       const cleanCategoryPool = perCategoryPool.filter((question) => !usedQuestionIds.has(question.id));
       const cleanFallbackPool = mixed.filter((question) => !usedQuestionIds.has(question.id));
