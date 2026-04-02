@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import { 
   Trophy, 
   BookOpen, 
@@ -49,12 +49,19 @@ import {
 
 // --- Components ---
 
+const MOTION_DURATION = {
+  micro: 0.14,
+  page: 0.24,
+  modal: 0.18,
+} as const;
+
 const ProgressBar = ({ current, total, color = "bg-indigo-600" }: { current: number; total: number; color?: string }) => (
   <div className="w-full bg-slate-200 h-2 rounded-full overflow-hidden">
     <motion.div 
       className={cn("h-full", color)}
       initial={{ width: 0 }}
       animate={{ width: `${(current / (total || 1)) * 100}%` }}
+      transition={{ duration: MOTION_DURATION.micro, ease: 'easeOut' }}
     />
   </div>
 );
@@ -129,6 +136,7 @@ const QuestionArea = React.memo(({ question, session, answerQuestion }: {
   session: QuizSession; 
   answerQuestion: (answer: any) => void;
 }) => {
+  const prefersReducedMotion = useReducedMotion();
   const currentAnswer = session.answers[question.id];
   const isSubmitted = session.isSubmitted;
 
@@ -234,10 +242,10 @@ const QuestionArea = React.memo(({ question, session, answerQuestion }: {
   return (
     <motion.div
       key={question.id}
-      initial={{ opacity: 0, y: 12 }}
+      initial={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -12 }}
-      transition={{ duration: 0.25 }}
+      exit={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, y: -8 }}
+      transition={{ duration: MOTION_DURATION.page, ease: 'easeOut' }}
       className="space-y-8"
     >
       <div className="space-y-4">
@@ -273,6 +281,7 @@ const QuestionArea = React.memo(({ question, session, answerQuestion }: {
 // --- Main App ---
 
 export default function App() {
+  const prefersReducedMotion = useReducedMotion();
   const { 
     progress, 
     session, 
@@ -317,6 +326,12 @@ export default function App() {
   const currentQuestion = session?.questions[session.currentIdx];
   const isLastQuestion = session && session.currentIdx === session.questions.length - 1;
   const currentSubTest = session?.subTests && session.currentSubTestIdx !== undefined ? session.subTests[session.currentSubTestIdx] : null;
+  const pageTransition = prefersReducedMotion
+    ? { duration: 0.01 }
+    : { duration: MOTION_DURATION.page, ease: 'easeOut' as const };
+  const modalTransition = prefersReducedMotion
+    ? { duration: 0.01 }
+    : { duration: MOTION_DURATION.modal, ease: 'easeOut' as const };
 
   // --- Views ---
 
@@ -425,7 +440,9 @@ export default function App() {
           ].map((feature) => (
             <motion.button
               key={feature.id}
-              whileHover={{ y: -8 }}
+              whileHover={prefersReducedMotion ? undefined : { y: -3 }}
+              whileTap={prefersReducedMotion ? undefined : { scale: 0.995 }}
+              transition={{ duration: MOTION_DURATION.micro, ease: 'easeOut' }}
               onClick={() => feature.id === 'study' ? setView('study') : handleStart(feature.id as any)}
               className="bg-white p-8 rounded-[40px] border border-slate-200 shadow-sm text-left space-y-6 group hover:border-indigo-300 transition-all"
             >
@@ -459,8 +476,9 @@ export default function App() {
           ].map(cat => (
             <motion.button
               key={cat.id}
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
+              whileHover={prefersReducedMotion ? undefined : { y: -2 }}
+              whileTap={prefersReducedMotion ? undefined : { scale: 0.99 }}
+              transition={{ duration: MOTION_DURATION.micro, ease: 'easeOut' }}
               onClick={() => handleStart('category', cat.id as Category)}
               className="bg-white p-6 rounded-[32px] border border-slate-200 shadow-sm text-center flex flex-col items-center gap-4 group hover:bg-slate-50 transition-all"
             >
@@ -549,13 +567,15 @@ export default function App() {
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
+                transition={modalTransition}
                 onClick={() => setShowSubTestConfirm(false)}
                 className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
               />
               <motion.div 
-                initial={{ opacity: 0, scale: 0.9, y: 20 }}
+                initial={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, scale: 0.98, y: 12 }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}
-                exit={{ opacity: 0, scale: 0.9, y: 20 }}
+                exit={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, scale: 0.98, y: 12 }}
+                transition={modalTransition}
                 className="relative bg-white rounded-[32px] p-8 max-w-md w-full shadow-2xl space-y-6"
               >
                 <div className="bg-indigo-100 w-16 h-16 rounded-2xl flex items-center justify-center text-indigo-600 mx-auto">
@@ -596,13 +616,15 @@ export default function App() {
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
+                transition={modalTransition}
                 onClick={() => setShowSubmitConfirm(false)}
                 className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
               />
               <motion.div 
-                initial={{ opacity: 0, scale: 0.9, y: 20 }}
+                initial={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, scale: 0.98, y: 12 }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}
-                exit={{ opacity: 0, scale: 0.9, y: 20 }}
+                exit={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, scale: 0.98, y: 12 }}
+                transition={modalTransition}
                 className="relative bg-white rounded-[32px] p-8 max-w-md w-full shadow-2xl space-y-6"
               >
                 <div className="bg-green-100 w-16 h-16 rounded-2xl flex items-center justify-center text-green-600 mx-auto">
@@ -1164,10 +1186,10 @@ export default function App() {
             return (
               <motion.button
                 key={material.id}
-                initial={{ opacity: 0, y: 20 }}
+                initial={prefersReducedMotion ? false : { opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: idx * 0.04 }}
-                whileHover={{ y: -6, transition: { duration: 0.2 } }}
+                transition={prefersReducedMotion ? { duration: 0.01 } : { duration: MOTION_DURATION.page, delay: Math.min(idx * 0.02, 0.12), ease: 'easeOut' }}
+                whileHover={prefersReducedMotion ? undefined : { y: -2, transition: { duration: MOTION_DURATION.micro } }}
                 onClick={() => setSelectedMaterial(material)}
                 className="bg-white rounded-[32px] border border-slate-200 shadow-sm hover:shadow-xl text-left overflow-hidden group transition-all duration-300"
               >
@@ -1331,10 +1353,10 @@ export default function App() {
         {view === 'dashboard' && (
           <motion.div 
             key="dashboard"
-            initial={{ opacity: 0, y: 10 }}
+            initial={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            transition={{ duration: 0.3, ease: "easeOut" }}
+            exit={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, y: -8 }}
+            transition={pageTransition}
           >
             <DashboardView />
             <nav className="fixed bottom-8 left-1/2 -translate-x-1/2 bg-white/80 backdrop-blur-xl border border-slate-200 px-8 py-4 rounded-[32px] shadow-2xl shadow-indigo-100 flex gap-12 z-50">
@@ -1354,10 +1376,10 @@ export default function App() {
         {view === 'quiz' && (
           <motion.div 
             key="quiz"
-            initial={{ opacity: 0, scale: 0.98 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.98 }}
-            transition={{ duration: 0.4, ease: "easeInOut" }}
+            initial={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, y: -6 }}
+            transition={pageTransition}
           >
             <QuizView />
           </motion.div>
@@ -1366,10 +1388,10 @@ export default function App() {
         {view === 'analytics' && (
           <motion.div 
             key="analytics"
-            initial={{ opacity: 0, y: 10 }}
+            initial={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            transition={{ duration: 0.3, ease: "easeOut" }}
+            exit={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, y: -8 }}
+            transition={pageTransition}
           >
             <AnalyticsView />
             <nav className="fixed bottom-8 left-1/2 -translate-x-1/2 bg-white/80 backdrop-blur-xl border border-slate-200 px-8 py-4 rounded-[32px] shadow-2xl shadow-indigo-100 flex gap-12 z-50">
@@ -1389,10 +1411,10 @@ export default function App() {
         {view === 'report' && (
           <motion.div 
             key="report"
-            initial={{ opacity: 0, y: 10 }}
+            initial={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            transition={{ duration: 0.3, ease: "easeOut" }}
+            exit={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, y: -8 }}
+            transition={pageTransition}
           >
             <ReportView />
           </motion.div>
@@ -1401,10 +1423,10 @@ export default function App() {
         {view === 'study' && (
           <motion.div 
             key="study"
-            initial={{ opacity: 0, y: 10 }}
+            initial={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            transition={{ duration: 0.3, ease: "easeOut" }}
+            exit={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, y: -8 }}
+            transition={pageTransition}
           >
             <StudyView />
             <nav className="fixed bottom-8 left-1/2 -translate-x-1/2 bg-white/80 backdrop-blur-xl border border-slate-200 px-8 py-4 rounded-[32px] shadow-2xl shadow-indigo-100 flex gap-12 z-50">
