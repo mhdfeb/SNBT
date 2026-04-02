@@ -51,6 +51,7 @@ export interface UserProgress {
   categoryStats: { [key in Category]: { correct: number; total: number } };
   currentDifficulty: Difficulty;
   reports: AssessmentReport[];
+  materialMastery: { [concept: string]: { correct: number; total: number } };
   materialMastery: { [concept: string]: number }; // 0-100 per concept
   lastRemedialConcepts?: {
     concept: string;
