@@ -109,6 +109,85 @@ export default function App() {
   const [selectedProdi, setSelectedProdi] = useState(PTN_DATA[0]?.prodi[0]?.id ?? '');
   const navStartRef = useRef<number>(0);
 
+  const [onboardingTarget, setOnboardingTarget] = useState<UserTarget>(() => ({
+    ptnId: progress.target?.ptnId ?? '',
+    prodiId: progress.target?.prodiId ?? '',
+    examDate: progress.target?.examDate ?? '',
+    baselineScore: progress.target?.baselineScore ?? 520,
+  }));
+
+  const selectedPTN = useMemo(
+    () => PTN_DATA.find((ptn) => ptn.id === (progress.target?.ptnId || onboardingTarget.ptnId)),
+    [onboardingTarget.ptnId, progress.target?.ptnId],
+  );
+  const selectedProdi = useMemo(
+    () => selectedPTN?.prodi.find((prodi) => prodi.id === (progress.target?.prodiId || onboardingTarget.prodiId)),
+    [onboardingTarget.prodiId, progress.target?.prodiId, selectedPTN],
+  );
+
+  const latestReport = progress.reports?.[0];
+  const currentScore = latestReport?.totalScore ?? progress.target?.baselineScore ?? onboardingTarget.baselineScore;
+  const targetScore = selectedProdi?.passingGrade ?? 700;
+  const gapScore = Math.max(0, targetScore - currentScore);
+  const progressToTarget = toPct((currentScore / targetScore) * 100);
+  const admissionChance = estimateChance(currentScore, targetScore);
+  const baselineChance = estimateChance(progress.target?.baselineScore ?? onboardingTarget.baselineScore, targetScore);
+
+  const categoryPerformance = useMemo(() => {
+    return CATEGORY_LIST.map((category) => {
+      const series = (progress.reports ?? []).slice(0, 3).map((report) => report.categoryScores[category] ?? 0);
+      const latest = series[0] ?? 0;
+      const previous = series[1] ?? latest;
+      const trend = latest - previous;
+      return {
+        category,
+        latest,
+        trend,
+        target: clamp(Math.round((targetScore / 800) * 100), 55, 95),
+      };
+    }).sort((a, b) => a.latest - b.latest);
+  }, [progress.reports, targetScore]);
+
+  const weeklyPlan = useMemo(() => {
+    const primary = categoryPerformance[0];
+    const secondary = categoryPerformance[1];
+    const week1Target = Math.max(currentScore + Math.round(gapScore * 0.25), currentScore + 10);
+    const week2Target = Math.max(currentScore + Math.round(gapScore * 0.5), week1Target + 10);
+    const week3Target = Math.max(currentScore + Math.round(gapScore * 0.75), week2Target + 10);
+    const week4Target = Math.max(targetScore, week3Target + 10);
+
+    return {
+      focus: [primary?.category, secondary?.category].filter(Boolean) as Category[],
+      weeks: [
+        { label: 'Minggu 1 · Foundation Reset', targetScore: week1Target, dailyMinutes: 90 },
+        { label: 'Minggu 2 · Gap Closing', targetScore: week2Target, dailyMinutes: 110 },
+        { label: 'Minggu 3 · Speed & Accuracy', targetScore: week3Target, dailyMinutes: 120 },
+        { label: 'Minggu 4 · Exam Lock-in', targetScore: week4Target, dailyMinutes: 130 },
+      ],
+    };
+  }, [categoryPerformance, currentScore, gapScore, targetScore]);
+
+  const criticalTrend = categoryPerformance.filter((item) => item.trend < -5 || item.latest < item.target - 12);
+  const remedialLocked = criticalTrend.length > 0;
+  const mustOnboard = !progress.target?.ptnId || !progress.target?.prodiId || !progress.target?.examDate;
+
+  const simulationInsights = useMemo(() => {
+    const latest = progress.simulationReports?.[0];
+    const previous = progress.simulationReports?.[1];
+    if (!latest) return null;
+    const latestChance = estimateChance(latest.totalScore, targetScore);
+    const previousChance = previous ? estimateChance(previous.totalScore, targetScore) : baselineChance;
+    return {
+      latestChance,
+      delta: latestChance - previousChance,
+      latestScore: latest.totalScore,
+    };
+  }, [baselineChance, progress.simulationReports, targetScore]);
+
+  const todayPriorityAction = remedialLocked
+    ? `Remedial wajib ${criticalTrend[0]?.category} (45 menit) sebelum lanjut tryout.`
+    : `Eksekusi drill ${weeklyPlan.focus[0] ?? 'TPS'} 30 menit + review error log 20 menit.`;
+
   const currentQuestion = useMemo(() => {
     if (!session) return null;
     return session.questions[session.currentIdx] ?? null;
@@ -154,6 +233,11 @@ export default function App() {
       total_questions: session?.questions.length ?? 0,
     });
     setView('result');
+  };
+
+  const submitOnboarding = () => {
+    if (!onboardingTarget.ptnId || !onboardingTarget.prodiId || !onboardingTarget.examDate) return;
+    setTarget(onboardingTarget);
   };
 
   useEffect(() => {
