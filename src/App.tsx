@@ -88,12 +88,12 @@ const SubTestCountdown = React.memo(({ expiresAt, onExpire }: { expiresAt: numbe
 
 const DifficultyBadge = ({ difficulty }: { difficulty: Difficulty }) => {
   const colors = {
-    easy: 'bg-green-100 text-green-700 border-green-200',
-    medium: 'bg-yellow-100 text-yellow-700 border-yellow-200',
-    trap: 'bg-red-100 text-red-700 border-red-200',
+    easy: 'ui-badge-success',
+    medium: 'ui-badge-warning',
+    trap: 'ui-badge-info',
   };
   return (
-    <span className={cn("px-2 py-0.5 rounded-full text-[10px] font-bold uppercase border", colors[difficulty])}>
+    <span className={cn("ui-badge text-[10px] font-bold uppercase", colors[difficulty])}>
       {difficulty}
     </span>
   );
@@ -117,7 +117,7 @@ const QuestionTimer = ({ isSubmitted, currentIdx }: { isSubmitted: boolean; curr
   }, [isSubmitted, currentIdx]);
 
   return (
-    <div className="flex items-center gap-3 text-xs font-mono text-slate-400 bg-slate-50 px-4 py-2 rounded-full border border-slate-100">
+    <div className="ui-badge font-mono text-slate-600 bg-slate-50 border-slate-200">
       <Clock size={14} className="text-slate-300" />
       Waktu Soal: {formatTime(time)}
     </div>
@@ -243,8 +243,8 @@ const QuestionArea = React.memo(({ question, session, answerQuestion }: {
       <div className="space-y-4">
         <div className="flex items-center gap-2 flex-wrap">
           <DifficultyBadge difficulty={question.difficulty} />
-          <span className="text-xs font-semibold text-slate-400 bg-slate-100 px-3 py-1 rounded-full">{question.category}</span>
-          <span className="text-xs font-semibold text-slate-400 bg-slate-100 px-3 py-1 rounded-full">{question.concept}</span>
+          <span className="ui-badge-info">{question.category}</span>
+          <span className="ui-badge-info">{question.concept}</span>
           <QuestionTimer isSubmitted={session.isSubmitted} currentIdx={session.currentIdx} />
         </div>
         <div className="prose prose-slate max-w-none">
@@ -372,7 +372,7 @@ export default function App() {
       )}
       {/* Hero Section - Bento Style */}
       <div className="grid md:grid-cols-3 gap-6">
-        <div className="md:col-span-2 bg-slate-900 rounded-[48px] p-12 text-white relative overflow-hidden shadow-2xl shadow-slate-200">
+        <div className="md:col-span-2 ui-card bg-slate-900 rounded-[48px] p-12 text-white relative overflow-hidden shadow-2xl shadow-slate-200 border-slate-800">
           <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-indigo-600/20 rounded-full blur-[120px] -mr-32 -mt-32" />
           <div className="absolute bottom-0 left-0 w-64 h-64 bg-violet-600/10 rounded-full blur-[80px] -ml-20 -mb-20" />
           
@@ -383,11 +383,11 @@ export default function App() {
             </div>
             
             <div className="space-y-4">
-              <h1 className="text-6xl font-black leading-[1.05] tracking-tight">
+              <h1 className="text-display leading-[1.05]">
                 Taklukkan <br />
                 <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-violet-400">Kampus Impian.</span>
               </h1>
-              <p className="text-slate-400 text-xl font-medium max-w-lg leading-relaxed">
+              <p className="text-body text-slate-300 max-w-lg">
                 Platform simulasi dengan sistem penilaian IRT terakurat untuk mengukur peluang lolos PTN favoritmu.
               </p>
             </div>
@@ -395,14 +395,14 @@ export default function App() {
             <div className="flex flex-wrap gap-4 pt-6">
               <button 
                 onClick={() => handleStart('tryout')}
-                className="bg-indigo-600 text-white px-10 py-5 rounded-[24px] font-black hover:bg-indigo-500 transition-all shadow-xl shadow-indigo-900/40 flex items-center gap-4 group text-sm uppercase tracking-widest"
+                className="ui-btn-primary px-10 py-5 rounded-[24px] shadow-xl shadow-indigo-900/40 group text-sm uppercase tracking-widest"
               >
                 Mulai Tryout Full
                 <ArrowRight size={20} className="group-hover:translate-x-2 transition-transform" />
               </button>
               <button 
                 onClick={() => setView('study')}
-                className="bg-white/5 backdrop-blur-md text-white border border-white/10 px-10 py-5 rounded-[24px] font-black hover:bg-white/10 transition-all text-sm uppercase tracking-widest"
+                className="ui-btn px-10 py-5 rounded-[24px] bg-white/5 backdrop-blur-md text-white border border-white/10 hover:bg-white/10 text-sm uppercase tracking-widest"
               >
                 Pelajari Materi
               </button>
@@ -410,7 +410,7 @@ export default function App() {
           </div>
         </div>
 
-        <div className="bg-white rounded-[48px] p-10 border border-slate-200 shadow-sm flex flex-col justify-between group hover:border-indigo-300 transition-all relative overflow-hidden">
+        <div className="ui-card ui-card-hover rounded-[48px] p-10 flex flex-col justify-between group relative overflow-hidden">
           <div className="absolute top-0 right-0 p-8 opacity-[0.03] group-hover:opacity-[0.08] transition-opacity">
             <Flame size={180} />
           </div>
@@ -445,7 +445,7 @@ export default function App() {
           { label: 'Materi Dikuasai', value: `${Math.round((Object.keys(progress.materialMastery).length / 20) * 100)}%`, icon: GraduationCap, color: 'text-indigo-500', bg: 'bg-indigo-50' },
           { label: 'Peringkat Nasional', value: progress.reports.length > 0 ? `#${progress.reports[0].nationalRank}` : '-', icon: Award, color: 'text-violet-500', bg: 'bg-violet-50' },
         ].map((stat, idx) => (
-          <div key={idx} className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-3 hover:shadow-md transition-all">
+          <div key={idx} className="ui-card ui-card-hover p-6 rounded-3xl space-y-3">
             <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center", stat.bg)}>
               <stat.icon className={stat.color} size={20} />
             </div>
@@ -501,7 +501,7 @@ export default function App() {
 
       <section className="space-y-6">
         <div className="flex items-center justify-between">
-          <h2 className="text-2xl font-black text-slate-900 flex items-center gap-3">
+          <h2 className="text-title flex items-center gap-3">
             <div className="bg-indigo-600 w-2 h-8 rounded-full" />
             Pilih Mode Latihan
           </h2>
@@ -517,7 +517,7 @@ export default function App() {
               key={feature.id}
               whileHover={{ y: -8 }}
               onClick={() => feature.id === 'study' ? setView('study') : handleStart(feature.id as any)}
-              className="bg-white p-8 rounded-[40px] border border-slate-200 shadow-sm text-left space-y-6 group hover:border-indigo-300 transition-all"
+              className="ui-card ui-card-hover p-8 rounded-[40px] text-left space-y-6 group"
             >
               <div className={cn("w-16 h-16 rounded-3xl flex items-center justify-center text-white shadow-2xl", feature.color, feature.shadow)}>
                 <feature.icon size={32} />
@@ -572,7 +572,7 @@ export default function App() {
 
       {/* Category Selection */}
       <section className="space-y-6">
-        <h2 className="text-2xl font-black text-slate-900 flex items-center gap-3">
+        <h2 className="text-title flex items-center gap-3">
           <div className="bg-violet-600 w-2 h-8 rounded-full" />
           Fokus Per Kategori
         </h2>
@@ -588,7 +588,7 @@ export default function App() {
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
               onClick={() => handleStart('category', cat.id as Category)}
-              className="bg-white p-6 rounded-[32px] border border-slate-200 shadow-sm text-center flex flex-col items-center gap-4 group hover:bg-slate-50 transition-all"
+              className="ui-card ui-card-hover p-6 rounded-[32px] text-center flex flex-col items-center gap-4 group hover:bg-slate-50"
             >
               <div className={cn("w-16 h-16 rounded-2xl flex items-center justify-center text-white shadow-lg group-hover:rotate-6 transition-transform", cat.color)}>
                 <cat.icon size={32} />
@@ -632,7 +632,7 @@ export default function App() {
     return (
       <div className="min-h-screen bg-[#f8fafc] flex flex-col font-sans">
         {/* Header CBT Resmi Style - Enhanced */}
-        <nav className="bg-[#1e293b] text-white px-6 py-4 flex justify-between items-center sticky top-0 z-50 shadow-xl">
+        <nav className="ui-navbar flex justify-between items-center">
           <div className="flex items-center gap-8">
             <div className="flex items-center gap-4">
               <div className="bg-white p-2 rounded-xl shadow-inner">
@@ -681,7 +681,7 @@ export default function App() {
                     setShowSubmitConfirm(true);
                   }
                 }}
-                className="bg-[#f59e0b] text-slate-900 px-10 py-3 rounded-2xl font-black hover:bg-[#d97706] transition-all text-xs uppercase tracking-[0.2em] shadow-lg shadow-amber-900/20 active:scale-95"
+                className="ui-btn-warning px-10 py-3 rounded-2xl text-xs uppercase tracking-[0.2em] shadow-lg shadow-amber-900/20 active:scale-95"
               >
                 {session.mode === 'tryout' && session.currentSubTestIdx !== undefined && session.subTests && session.currentSubTestIdx < session.subTests.length - 1 
                   ? 'SELESAI SUB-TES' 
@@ -719,7 +719,7 @@ export default function App() {
                 <div className="flex gap-3">
                   <button 
                     onClick={() => setShowSubTestConfirm(false)}
-                    className="flex-1 py-4 rounded-2xl font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors"
+                    className="ui-btn-secondary flex-1 py-4 rounded-2xl"
                   >
                     Batal
                   </button>
@@ -729,7 +729,7 @@ export default function App() {
                       setShowSubTestConfirm(false);
                       window.scrollTo(0, 0);
                     }}
-                    className="flex-1 py-4 rounded-2xl font-bold text-white bg-indigo-600 hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-100"
+                    className="ui-btn-primary flex-1 py-4 rounded-2xl shadow-lg shadow-indigo-100"
                   >
                     Lanjut
                   </button>
@@ -766,7 +766,7 @@ export default function App() {
                 <div className="flex gap-3">
                   <button 
                     onClick={() => setShowSubmitConfirm(false)}
-                    className="flex-1 py-4 rounded-2xl font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors"
+                    className="ui-btn-secondary flex-1 py-4 rounded-2xl"
                   >
                     Batal
                   </button>
@@ -780,7 +780,7 @@ export default function App() {
                       setView('report');
                       window.scrollTo(0, 0);
                     }}
-                    className="flex-1 py-4 rounded-2xl font-bold text-white bg-green-600 hover:bg-green-600 transition-colors shadow-lg shadow-green-100"
+                    className="ui-btn-success flex-1 py-4 rounded-2xl shadow-lg shadow-green-100"
                   >
                     Ya, Selesai
                   </button>
@@ -1177,7 +1177,7 @@ export default function App() {
 
         <div className="grid lg:grid-cols-3 gap-8">
           <div className="lg:col-span-2 space-y-8">
-            <div className="bg-white p-8 rounded-[40px] border border-slate-200 shadow-sm space-y-8">
+            <div className="ui-card p-8 rounded-[40px] space-y-8">
               <div className="flex items-center justify-between">
                 <h3 className="font-black text-slate-800 flex items-center gap-3">
                   <div className="bg-indigo-50 p-2 rounded-xl">
@@ -1206,7 +1206,7 @@ export default function App() {
               </div>
             </div>
 
-            <div className="bg-white p-8 rounded-[40px] border border-slate-200 shadow-sm space-y-8">
+            <div className="ui-card p-8 rounded-[40px] space-y-8">
               <h3 className="font-black text-slate-800 flex items-center gap-3">
                 <div className="bg-violet-50 p-2 rounded-xl">
                   <BarChart3 size={20} className="text-violet-600" />
@@ -1252,7 +1252,7 @@ export default function App() {
               </div>
             </div>
 
-            <div className="bg-white p-8 rounded-[40px] border border-slate-200 shadow-sm space-y-6">
+            <div className="ui-card p-8 rounded-[40px] space-y-6">
               <h3 className="font-black text-slate-800">Riwayat Tryout</h3>
               <div className="space-y-4">
                 {progress.reports.length > 0 ? progress.reports.map((report) => (
