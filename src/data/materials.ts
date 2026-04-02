@@ -1,6 +1,29 @@
 import { StudyMaterial } from '../types/quiz';
 
-export const STUDY_MATERIALS: StudyMaterial[] = [
+const LEGACY_STUDY_MATERIALS: StudyMaterial[] = [
+const PRIORITY_ORDER: StudyMaterial['priority'][] = ['high', 'medium', 'low'];
+
+const getPriorityMeta = (index: number) => {
+  const priority = PRIORITY_ORDER[index % PRIORITY_ORDER.length];
+  if (priority === 'high') {
+    return {
+      priority,
+      scoreImpact: 'Dampak skor tinggi: konsep ini sering muncul dan menentukan akurasi inti sub-tes.'
+    };
+  }
+  if (priority === 'medium') {
+    return {
+      priority,
+      scoreImpact: 'Dampak skor menengah: memperkuat konsistensi dan mengurangi salah karena jebakan umum.'
+    };
+  }
+  return {
+    priority,
+    scoreImpact: 'Dampak skor pendukung: menjaga stabilitas nilai saat soal variasi muncul.'
+  };
+};
+
+const BASE_STUDY_MATERIALS: Omit<StudyMaterial, 'studyBlocks' | 'priority' | 'scoreImpact' | 'quick30sSummary' | 'revisionNotes'>[] = [
   // ─── TPS ─────────────────────────────────────────────────────
   {
     id: 'tps-1',
@@ -1466,3 +1489,131 @@ Teks akademik disajikan bersama **grafik, tabel, atau diagram** → soal menggab
     ]
   }
 ];
+
+type LearningBlockType = 'core_concept' | 'worked_example' | 'common_trap' | 'quick_drill';
+
+const BLOCK_LABEL: Record<LearningBlockType, string> = {
+  core_concept: 'Konsep Inti',
+  worked_example: 'Worked Example',
+  common_trap: 'Common Trap',
+  quick_drill: 'Quick Drill',
+};
+
+const toBulletItems = (text: string, fallback: string[]): string[] => {
+  const matches = Array.from(text.matchAll(/(?:^-|^\*|^\d+\.)\s+(.+)$/gm)).map(m => m[1].trim()).filter(Boolean);
+  return matches.length >= 2 ? matches.slice(0, 4) : fallback;
+};
+
+const buildLearningBlocks = (material: StudyMaterial): StudyMaterial['learningBlocks'] => {
+  const bullets = toBulletItems(material.fullContent, [
+    `Fokus pada poin kunci ${material.concept}.`,
+    'Gunakan eliminasi jawaban untuk menghemat waktu.',
+    'Catat pola soal yang sering berulang.',
+    'Review error umum sebelum mengerjakan soal berikutnya.',
+  ]);
+
+  return [
+    {
+      id: `${material.id}-core`,
+      type: 'core_concept',
+      title: `${BLOCK_LABEL.core_concept}: ${material.concept}`,
+      content: material.summary,
+      checkpoints: [
+        { id: `${material.id}-core-c1`, prompt: 'Pilih strategi utama untuk tipe soal ini.', focus: 'strategi' },
+        { id: `${material.id}-core-c2`, prompt: 'Identifikasi indikator kapan strategi dipakai.', focus: 'trigger' },
+      ],
+    },
+    {
+      id: `${material.id}-example`,
+      type: 'worked_example',
+      title: BLOCK_LABEL.worked_example,
+      content: bullets.slice(0, 2).map((item, i) => `${i + 1}. ${item}`).join('\n'),
+      checkpoints: [
+        { id: `${material.id}-ex-c1`, prompt: 'Urutkan langkah penyelesaian paling efisien.', focus: 'langkah' },
+        { id: `${material.id}-ex-c2`, prompt: 'Tentukan alasan langkah kritis di worked example.', focus: 'alasan' },
+      ],
+    },
+    {
+      id: `${material.id}-trap`,
+      type: 'common_trap',
+      title: BLOCK_LABEL.common_trap,
+      content: bullets.slice(2, 4).map(item => `- ${item}`).join('\n'),
+      checkpoints: [
+        { id: `${material.id}-trap-c1`, prompt: 'Pilih jebakan yang paling sering bikin salah.', focus: 'jebakan' },
+        { id: `${material.id}-trap-c2`, prompt: 'Tentukan tindakan pencegahan saat menemukan jebakan.', focus: 'mitigasi' },
+      ],
+    },
+    {
+      id: `${material.id}-drill`,
+      type: 'quick_drill',
+      title: BLOCK_LABEL.quick_drill,
+      content: 'Latihan 30-60 detik: sebutkan langkah, cek jebakan, lalu jawab cepat.',
+      checkpoints: [
+        { id: `${material.id}-drill-c1`, prompt: 'Nilai kesiapan menjawab cepat (<60 detik).', focus: 'kecepatan' },
+        { id: `${material.id}-drill-c2`, prompt: 'Konfirmasi akurasi setelah speed drill.', focus: 'akurasi' },
+      ],
+      quickRevision: 'Mode ulang cepat 30–60 detik: baca ringkasan, recall 1 jebakan, kerjakan 1 soal mental.',
+    },
+  ];
+};
+
+export const STUDY_MATERIALS: StudyMaterial[] = LEGACY_STUDY_MATERIALS.map(material => ({
+  ...material,
+  learningBlocks: buildLearningBlocks(material),
+}));
+
+const buildStudyBlocks = (material: Omit<StudyMaterial, 'studyBlocks' | 'priority' | 'scoreImpact' | 'quick30sSummary' | 'revisionNotes'>) => [
+  {
+    id: `${material.id}-core`,
+    title: 'Blok 1 — Konsep Inti',
+    coreConcept: `Pahami kerangka utama ${material.concept} sebelum latihan detail.`,
+    workedExample: `Contoh worked-example: ubah satu soal ${material.concept} menjadi langkah 1) identifikasi informasi, 2) pilih strategi, 3) verifikasi hasil.`,
+    commonMistakes: [
+      'Langsung hitung tanpa memetakan informasi penting.',
+      'Menghafal pola tanpa memahami alasan di balik langkah.',
+      'Tidak mengecek ulang apakah jawaban menjawab pertanyaan.'
+    ],
+    quickExercise: `Latihan cepat: tulis 3 indikator bahwa soal ini termasuk ${material.concept}.`,
+    strategyWhenToUse: `Gunakan strategi ini saat soal meminta inferensi/relasi dan informasi tidak diberikan secara eksplisit.`,
+    checkpoints: [
+      { question: 'Apa informasi minimum yang wajib ditandai dulu?', answer: 'Kata kunci, batasan, dan apa yang ditanya.' },
+      { question: 'Strategi utama apa yang dipakai di blok ini?', answer: 'Identifikasi pola/relasi lalu validasi dengan eliminasi.' }
+    ]
+  },
+  {
+    id: `${material.id}-application`,
+    title: 'Blok 2 — Worked Example ke Variasi Soal',
+    coreConcept: 'Transfer strategi dari contoh ke bentuk soal baru dengan struktur serupa.',
+    workedExample: 'Worked-example: setelah menyelesaikan contoh, ubah satu angka/istilah lalu cek apakah logika penyelesaian tetap sama.',
+    commonMistakes: [
+      'Terlalu terpaku pada angka persis dari contoh.',
+      'Tidak membedakan soal yang terlihat mirip tetapi struktur logikanya berbeda.',
+      'Melewatkan proses eliminasi opsi.'
+    ],
+    quickExercise: 'Latihan cepat: kerjakan 1 soal serupa dalam 90 detik dan tulis alasan tiap langkah.',
+    strategyWhenToUse: 'Pakai saat menemukan soal baru yang bentuknya berbeda tetapi relasi antar unsur sama.',
+    checkpoints: [
+      { question: 'Apa tanda bahwa soal baru masih satu keluarga strategi?', answer: 'Relasi inti dan jenis inferensi yang diminta tetap sama.' },
+      { question: 'Langkah verifikasi tercepat apa?', answer: 'Uji jawaban pada kondisi batas atau substitusi balik singkat.' },
+      { question: 'Kapan harus pindah strategi?', answer: 'Saat 2 percobaan tidak memberi progres dalam ±45 detik.' }
+    ]
+  }
+];
+
+export const STUDY_MATERIALS: StudyMaterial[] = BASE_STUDY_MATERIALS.map((material, index) => {
+  const { priority, scoreImpact } = getPriorityMeta(index);
+  return {
+    ...material,
+    priority,
+    scoreImpact,
+    quick30sSummary: `${material.concept}: fokus pada pola inti, hindari jebakan umum, lalu cek jawaban dengan satu validasi cepat.`,
+    revisionNotes: [
+      'Review 1: ulangi blok konsep inti 24 jam setelah belajar pertama.',
+      'Review 2: kerjakan checkpoint tanpa lihat catatan pada hari ke-3.',
+      'Review 3: ulang soal variasi pada hari ke-7 dan catat pola salah.'
+    ],
+    studyBlocks: buildStudyBlocks(material)
+  };
+});
+export const findMaterialByConcept = (concept: string): StudyMaterial | undefined =>
+  STUDY_MATERIALS.find((m) => m.concept === concept);
