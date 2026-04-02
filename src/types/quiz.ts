@@ -73,6 +73,23 @@ export interface StudyMaterial {
   title: string;
   fullContent: string;
   summary: string;
+  priority?: 'high' | 'medium' | 'low';
+  scoreImpact?: string;
+  quick30sSummary?: string;
+  revisionNotes?: string[];
+  studyBlocks?: {
+    id: string;
+    title: string;
+    coreConcept: string;
+    workedExample: string;
+    commonMistakes: string[];
+    quickExercise: string;
+    strategyWhenToUse: string;
+    checkpoints: {
+      question: string;
+      answer: string;
+    }[];
+  }[];
   sources: { name: string; url: string }[];
 }
 
