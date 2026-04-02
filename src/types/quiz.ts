@@ -8,6 +8,14 @@ export type Concept =
   | 'Literasi Teks' | 'Main Idea' | 'Inference' | 'Vocabulary' | 'Bilangan' | 'Aljabar' | 'Geometri' | 'Data';
 
 export type QuestionType = 'multiple_choice' | 'complex_multiple_choice' | 'short_answer';
+export type SourceValidity = 'verified' | 'reviewed' | 'draft';
+
+export interface QuestionBlueprint {
+  subtopic: string;
+  cognitiveLevel: 'C1' | 'C2' | 'C3' | 'C4' | 'C5' | 'C6';
+  competencyIndicator: string;
+  sourceValidity: SourceValidity;
+}
 
 export interface ComplexOption {
   statement: string;
@@ -26,11 +34,36 @@ export interface Question {
   shortAnswerCorrect?: number; // For short_answer (number only)
   correctAnswer?: number; // For multiple_choice (index)
   explanation: string;
+  blueprint: QuestionBlueprint;
   irtParams: {
     difficulty: number; // b parameter (-3 to 3)
     discrimination: number; // a parameter (0 to 2)
     guessing: number; // c parameter (0 to 0.25)
   };
+}
+
+export interface DistractorStat {
+  optionIndex: number;
+  selectedCount: number;
+  selectedRate: number;
+  isEffective: boolean;
+}
+
+export interface QuestionPerformanceStat {
+  questionId: string;
+  attempts: number;
+  correctAttempts: number;
+  pValue: number;
+  highGroupAttempts: number;
+  highGroupCorrect: number;
+  lowGroupAttempts: number;
+  lowGroupCorrect: number;
+  discriminationIndex: number;
+  optionSelections: number[];
+  distractorStats: DistractorStat[];
+  flags: string[];
+  needsEditorialReview: boolean;
+  lastUpdatedAt: string;
 }
 
 export interface StudyMaterial {
@@ -51,8 +84,15 @@ export interface UserProgress {
   categoryStats: { [key in Category]: { correct: number; total: number } };
   currentDifficulty: Difficulty;
   reports: AssessmentReport[];
+  materialMastery: { [concept: string]: { correct: number; total: number } };
   materialMastery: { [concept: string]: number }; // 0-100 per concept
   remedialCycles: RemedialCycle[];
+  questionPerformance: { [questionId: string]: QuestionPerformanceStat };
+  lastRemedialConcepts?: {
+    concept: string;
+    accuracy: number;
+    materialId?: string;
+  }[];
 }
 
 export interface AssessmentReport {
@@ -81,6 +121,11 @@ export interface RemedialCycle {
   baselineScore?: number;
   afterScore?: number;
   status: 'started' | 'material_pending' | 'needs_continue' | 'completed';
+  remedialConcepts?: {
+    concept: string;
+    accuracy: number;
+    materialId?: string;
+  }[];
 }
 
 export interface PTN {
@@ -121,4 +166,5 @@ export interface QuizSession {
     concept: Concept;
     phase: 'baseline' | 'after';
   };
+  packageId?: string;
 }

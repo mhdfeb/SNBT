@@ -295,6 +295,16 @@ export default function App() {
   const [showExitConfirm, setShowExitConfirm] = useState(false);
   const [showSubTestConfirm, setShowSubTestConfirm] = useState(false);
   const [showSubmitConfirm, setShowSubmitConfirm] = useState(false);
+  const iconOnlyFocusClass = "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white";
+
+  const findMaterialFromRemedial = (concept: string, materialId?: string) => {
+    if (materialId) {
+      const byId = STUDY_MATERIALS.find(material => material.id === materialId);
+      if (byId) return byId;
+    }
+    const normalizedConcept = concept.toLowerCase().trim();
+    return STUDY_MATERIALS.find(material => material.concept.toLowerCase().trim() === normalizedConcept);
+  };
 
   const getModeName = (mode: string) => {
     switch(mode) {
@@ -447,6 +457,47 @@ export default function App() {
       </div>
 
       {/* Main Features */}
+      {progress.lastRemedialConcepts && progress.lastRemedialConcepts.length > 0 && (
+        <section className="space-y-5">
+          <h2 className="text-2xl font-black text-slate-900 flex items-center gap-3">
+            <div className="bg-amber-500 w-2 h-8 rounded-full" />
+            Prioritas Belajar Hari Ini
+          </h2>
+          <div className="grid md:grid-cols-3 gap-5">
+            {progress.lastRemedialConcepts.slice(0, 3).map((item, idx) => {
+              const material = findMaterialFromRemedial(item.concept, item.materialId);
+              return (
+                <div key={`${item.concept}-${idx}`} className="bg-white p-6 rounded-3xl border border-amber-100 shadow-sm space-y-4">
+                  <div>
+                    <p className="text-[10px] text-amber-600 uppercase tracking-widest font-black">Akurasi Sesi Terakhir</p>
+                    <p className="text-2xl font-black text-slate-900">{item.accuracy}%</p>
+                    <p className="text-sm text-slate-500 font-semibold">{item.concept}</p>
+                  </div>
+                  {material ? (
+                    <button
+                      onClick={() => {
+                        setSelectedMaterial(material);
+                        setView('study');
+                      }}
+                      className="w-full bg-amber-500 text-white py-3 rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-amber-400 transition-colors"
+                    >
+                      Pelajari konsep ini sekarang
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => setView('study')}
+                      className="w-full bg-slate-900 text-white py-3 rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-slate-800 transition-colors"
+                    >
+                      Buka Pustaka Materi
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      )}
+
       <section className="space-y-6">
         <div className="flex items-center justify-between">
           <h2 className="text-2xl font-black text-slate-900 flex items-center gap-3">
@@ -852,7 +903,8 @@ export default function App() {
           <div className="flex items-center gap-6">
             <button 
               onClick={() => setView('dashboard')} 
-              className="p-3 hover:bg-slate-50 border border-slate-200 rounded-2xl text-slate-600 transition-all shadow-sm hover:shadow-md"
+              aria-label="Kembali ke Dashboard"
+              className={cn("p-3 hover:bg-slate-50 border border-slate-200 rounded-2xl text-slate-600 transition-all shadow-sm hover:shadow-md", iconOnlyFocusClass)}
             >
               <ChevronLeft size={24} />
             </button>
@@ -1006,6 +1058,45 @@ export default function App() {
               </div>
             </div>
           </div>
+
+          <div className="bg-white rounded-[56px] p-10 border border-slate-200 shadow-sm space-y-8">
+            <div className="flex items-center gap-4">
+              <div className="bg-amber-50 p-3 rounded-2xl">
+                <AlertTriangle size={24} className="text-amber-600" />
+              </div>
+              <div>
+                <h3 className="text-2xl font-black text-slate-900">Rekomendasi Remedial</h3>
+                <p className="text-sm text-slate-500 font-medium">Konsep dengan akurasi terendah dari sesi ini.</p>
+              </div>
+            </div>
+
+            <div className="grid md:grid-cols-3 gap-6">
+              {(selectedReport.remedialConcepts ?? []).slice(0, 3).map((item, idx) => {
+                const material = findMaterialFromRemedial(item.concept, item.materialId);
+                return (
+                  <div key={`${item.concept}-${idx}`} className="p-6 rounded-[32px] border border-amber-100 bg-amber-50/40 space-y-5">
+                    <div>
+                      <p className="text-[10px] font-black uppercase tracking-widest text-amber-600">Akurasi</p>
+                      <p className="text-3xl font-black text-slate-900">{item.accuracy}%</p>
+                      <p className="text-sm font-semibold text-slate-600 mt-1">{item.concept}</p>
+                    </div>
+                    <button
+                      onClick={() => {
+                        if (material) setSelectedMaterial(material);
+                        setView('study');
+                      }}
+                      className="w-full bg-indigo-600 text-white py-3.5 rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-indigo-500 transition-colors"
+                    >
+                      Pelajari konsep ini sekarang
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+            {(selectedReport.remedialConcepts ?? []).length === 0 && (
+              <p className="text-slate-500 font-medium">Belum ada data remedial untuk laporan ini.</p>
+            )}
+          </div>
         </div>
       </div>
     );
@@ -1028,7 +1119,11 @@ export default function App() {
       <div className="max-w-6xl mx-auto p-6 space-y-10 pb-32">
         <header className="flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <button onClick={() => setView('dashboard')} className="p-3 bg-white border border-slate-200 rounded-2xl text-slate-600 hover:bg-slate-50 transition-colors shadow-sm">
+            <button
+              onClick={() => setView('dashboard')}
+              aria-label="Kembali ke Dashboard"
+              className={cn("p-3 bg-white border border-slate-200 rounded-2xl text-slate-600 hover:bg-slate-50 transition-colors shadow-sm", iconOnlyFocusClass)}
+            >
               <ChevronLeft size={24} />
             </button>
             <div>
@@ -1182,7 +1277,8 @@ export default function App() {
             <div className="flex items-center gap-3">
               <button
                 onClick={() => setView('dashboard')}
-                className="p-2 bg-white/10 hover:bg-white/20 rounded-2xl text-white transition-colors"
+                aria-label="Kembali ke Dashboard"
+                className={cn("p-2 bg-white/10 hover:bg-white/20 rounded-2xl text-white transition-colors", iconOnlyFocusClass)}
               >
                 <ChevronLeft size={20} />
               </button>
@@ -1449,13 +1545,28 @@ export default function App() {
           >
             <DashboardView />
             <nav className="fixed bottom-8 left-1/2 -translate-x-1/2 bg-white/80 backdrop-blur-xl border border-slate-200 px-8 py-4 rounded-[32px] shadow-2xl shadow-indigo-100 flex gap-12 z-50">
-              <button onClick={() => setView('dashboard')} className={cn("p-3 rounded-2xl transition-all", "bg-indigo-600 text-white shadow-xl shadow-indigo-200")}>
+              <button
+                onClick={() => setView('dashboard')}
+                aria-label="Buka Dashboard"
+                aria-current={view === 'dashboard' ? 'page' : undefined}
+                className={cn("p-3 rounded-2xl transition-all", "bg-indigo-600 text-white shadow-xl shadow-indigo-200", iconOnlyFocusClass)}
+              >
                 <Home size={24} />
               </button>
-              <button onClick={() => setView('study')} className={cn("p-3 rounded-2xl transition-all", "text-slate-400 hover:text-slate-600")}>
+              <button
+                onClick={() => setView('study')}
+                aria-label="Buka Belajar Mandiri"
+                aria-current={view === 'study' ? 'page' : undefined}
+                className={cn("p-3 rounded-2xl transition-all", "text-slate-400 hover:text-slate-600", iconOnlyFocusClass)}
+              >
                 <BookOpen size={24} />
               </button>
-              <button onClick={() => setView('analytics')} className={cn("p-3 rounded-2xl transition-all", "text-slate-400 hover:text-slate-600")}>
+              <button
+                onClick={() => setView('analytics')}
+                aria-label="Buka Analisis Performa"
+                aria-current={view === 'analytics' ? 'page' : undefined}
+                className={cn("p-3 rounded-2xl transition-all", "text-slate-400 hover:text-slate-600", iconOnlyFocusClass)}
+              >
                 <BarChart3 size={24} />
               </button>
             </nav>
@@ -1484,13 +1595,28 @@ export default function App() {
           >
             <AnalyticsView />
             <nav className="fixed bottom-8 left-1/2 -translate-x-1/2 bg-white/80 backdrop-blur-xl border border-slate-200 px-8 py-4 rounded-[32px] shadow-2xl shadow-indigo-100 flex gap-12 z-50">
-              <button onClick={() => setView('dashboard')} className={cn("p-3 rounded-2xl transition-all", "text-slate-400 hover:text-slate-600")}>
+              <button
+                onClick={() => setView('dashboard')}
+                aria-label="Buka Dashboard"
+                aria-current={view === 'dashboard' ? 'page' : undefined}
+                className={cn("p-3 rounded-2xl transition-all", "text-slate-400 hover:text-slate-600", iconOnlyFocusClass)}
+              >
                 <Home size={24} />
               </button>
-              <button onClick={() => setView('study')} className={cn("p-3 rounded-2xl transition-all", "text-slate-400 hover:text-slate-600")}>
+              <button
+                onClick={() => setView('study')}
+                aria-label="Buka Belajar Mandiri"
+                aria-current={view === 'study' ? 'page' : undefined}
+                className={cn("p-3 rounded-2xl transition-all", "text-slate-400 hover:text-slate-600", iconOnlyFocusClass)}
+              >
                 <BookOpen size={24} />
               </button>
-              <button onClick={() => setView('analytics')} className={cn("p-3 rounded-2xl transition-all", "bg-indigo-600 text-white shadow-xl shadow-indigo-200")}>
+              <button
+                onClick={() => setView('analytics')}
+                aria-label="Buka Analisis Performa"
+                aria-current={view === 'analytics' ? 'page' : undefined}
+                className={cn("p-3 rounded-2xl transition-all", "bg-indigo-600 text-white shadow-xl shadow-indigo-200", iconOnlyFocusClass)}
+              >
                 <BarChart3 size={24} />
               </button>
             </nav>
@@ -1519,13 +1645,28 @@ export default function App() {
           >
             <StudyView />
             <nav className="fixed bottom-8 left-1/2 -translate-x-1/2 bg-white/80 backdrop-blur-xl border border-slate-200 px-8 py-4 rounded-[32px] shadow-2xl shadow-indigo-100 flex gap-12 z-50">
-              <button onClick={() => setView('dashboard')} className={cn("p-3 rounded-2xl transition-all", "text-slate-400 hover:text-slate-600")}>
+              <button
+                onClick={() => setView('dashboard')}
+                aria-label="Buka Dashboard"
+                aria-current={view === 'dashboard' ? 'page' : undefined}
+                className={cn("p-3 rounded-2xl transition-all", "text-slate-400 hover:text-slate-600", iconOnlyFocusClass)}
+              >
                 <Home size={24} />
               </button>
-              <button onClick={() => setView('study')} className={cn("p-3 rounded-2xl transition-all", "bg-indigo-600 text-white shadow-xl shadow-indigo-200")}>
+              <button
+                onClick={() => setView('study')}
+                aria-label="Buka Belajar Mandiri"
+                aria-current={view === 'study' ? 'page' : undefined}
+                className={cn("p-3 rounded-2xl transition-all", "bg-indigo-600 text-white shadow-xl shadow-indigo-200", iconOnlyFocusClass)}
+              >
                 <BookOpen size={24} />
               </button>
-              <button onClick={() => setView('analytics')} className={cn("p-3 rounded-2xl transition-all", "text-slate-400 hover:text-slate-600")}>
+              <button
+                onClick={() => setView('analytics')}
+                aria-label="Buka Analisis Performa"
+                aria-current={view === 'analytics' ? 'page' : undefined}
+                className={cn("p-3 rounded-2xl transition-all", "text-slate-400 hover:text-slate-600", iconOnlyFocusClass)}
+              >
                 <BarChart3 size={24} />
               </button>
             </nav>
