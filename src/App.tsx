@@ -32,6 +32,15 @@ import { PTN_DATA } from './data/ptn';
 import { Difficulty, Category, Question, AssessmentReport, StudyMaterial, QuizSession } from './types/quiz';
 import { STUDY_MATERIALS, findMaterialByConcept } from './data/materials';
 import ReactMarkdown from 'react-markdown';
+import { trackPageView } from './lib/analytics';
+import { 
+  BarChart, 
+  Bar, 
+  XAxis, 
+  YAxis, 
+  CartesianGrid, 
+  Tooltip, 
+  ResponsiveContainer, 
 import {
   BarChart,
   Bar,
@@ -308,6 +317,10 @@ export default function App() {
   const motionTransition = useMemo(() => reduceMotion ? { duration: 0 } : { duration: 0.3 }, [reduceMotion]);
 
   const [view, setView] = useState<'dashboard' | 'quiz' | 'analytics' | 'report' | 'study'>('dashboard');
+
+  useEffect(() => {
+    trackPageView(`/${view}`);
+  }, [view]);
   const [selectedReport, setSelectedReport] = useState<AssessmentReport | null>(null);
   const [selectedMaterial, setSelectedMaterial] = useState<StudyMaterial | null>(null);
   const [showSubTestConfirm, setShowSubTestConfirm] = useState(false);
