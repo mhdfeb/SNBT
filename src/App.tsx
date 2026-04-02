@@ -340,12 +340,14 @@ export default function App() {
       case 'mini': return 'Mini Tryout';
       case 'daily': return 'Latihan Harian';
       case 'tryout': return 'Tryout Full';
+      case 'simulation': return 'Simulasi Ketat';
       case 'category': return 'Latihan Kategori';
       case 'drill15': return 'Targeted Drill 15 Menit';
       default: return mode;
     }
   };
 
+  const handleStart = (mode: 'tryout' | 'mini' | 'daily' | 'category' | 'simulation', category?: Category) => {
   const handleStart = (mode: 'tryout' | 'mini' | 'daily' | 'drill15' | 'category', category?: Category) => {
     startSession(mode, category);
     setView('quiz');
@@ -711,6 +713,7 @@ export default function App() {
         </div>
         <div className="grid md:grid-cols-3 gap-6">
           {[
+            { id: 'simulation', title: 'Simulasi Ketat', desc: 'Mode ujian resmi: timer sub-tes, navigasi terbatas, bank soal terpisah.', icon: School, color: 'bg-slate-900', shadow: 'shadow-slate-300' },
             { id: 'mini', title: 'Mini Tryout', desc: '10 Soal campuran untuk latihan cepat 15 menit.', icon: Zap, color: 'bg-amber-500', shadow: 'shadow-amber-200' },
             { id: 'daily', title: 'Latihan Harian', desc: '5 Soal adaptif berdasarkan kelemahanmu.', icon: Target, color: 'bg-indigo-500', shadow: 'shadow-indigo-200' },
             { id: 'drill15', title: 'Targeted Drill 15 Menit', desc: 'Fokus otomatis ke 2-3 konsep terlemah dengan spaced repetition.', icon: AlertTriangle, color: 'bg-rose-500', shadow: 'shadow-rose-200' },
@@ -834,6 +837,7 @@ export default function App() {
 
   const QuizView = () => {
     if (!session || !currentQuestion) return null;
+    const isStrictSimulation = session.mode === 'simulation';
 
     return (
       <div className="min-h-screen bg-[#f8fafc] flex flex-col font-sans">
@@ -881,7 +885,7 @@ export default function App() {
             {!session.isSubmitted && (
               <button 
                 onClick={() => {
-                  if (session.mode === 'tryout' && session.currentSubTestIdx !== undefined && session.subTests && session.currentSubTestIdx < session.subTests.length - 1) {
+                  if ((session.mode === 'tryout' || session.mode === 'simulation') && session.currentSubTestIdx !== undefined && session.subTests && session.currentSubTestIdx < session.subTests.length - 1) {
                     setShowSubTestConfirm(true);
                   } else {
                     setShowSubmitConfirm(true);
@@ -889,7 +893,7 @@ export default function App() {
                 }}
                 className="ui-btn-warning px-10 py-3 rounded-2xl text-xs uppercase tracking-[0.2em] shadow-lg shadow-amber-900/20 active:scale-95"
               >
-                {session.mode === 'tryout' && session.currentSubTestIdx !== undefined && session.subTests && session.currentSubTestIdx < session.subTests.length - 1 
+                {(session.mode === 'tryout' || session.mode === 'simulation') && session.currentSubTestIdx !== undefined && session.subTests && session.currentSubTestIdx < session.subTests.length - 1 
                   ? 'SELESAI SUB-TES' 
                   : 'SELESAI UJIAN'}
               </button>
@@ -1024,7 +1028,7 @@ export default function App() {
             <div className="bg-[#f8fafc] border-t border-slate-200 p-6 flex justify-between items-center sticky bottom-0">
               <button 
                 onClick={prevQuestion}
-                disabled={session.currentIdx === 0}
+                disabled={session.currentIdx === 0 || isStrictSimulation}
                 className="flex items-center gap-3 px-8 py-3 bg-[#34495e] text-white font-bold rounded-xl disabled:opacity-30 hover:bg-[#2c3e50] transition-all shadow-md uppercase text-xs tracking-widest"
               >
                 <ChevronLeft size={18} /> Sebelumnya
@@ -1067,7 +1071,7 @@ export default function App() {
               
               <div className="grid grid-cols-5 gap-2">
                 {session.questions.map((q, idx) => {
-                  if (session.mode === 'tryout' && currentSubTest) {
+                  if ((session.mode === 'tryout' || session.mode === 'simulation') && currentSubTest) {
                     if (!currentSubTest.questionIndices.includes(idx)) return null;
                   }
 
@@ -1086,7 +1090,11 @@ export default function App() {
                   return (
                     <button
                       key={idx}
-                      onClick={() => setSession(prev => prev ? { ...prev, currentIdx: idx } : null)}
+                      onClick={() => {
+                        if (isStrictSimulation) return;
+                        setSession(prev => prev ? { ...prev, currentIdx: idx } : null);
+                      }}
+                      disabled={isStrictSimulation}
                       className={cn(
                         "aspect-square rounded-lg flex items-center justify-center text-xs font-black transition-all border-2 relative",
                         isCurrent ? "border-[#3498db] scale-110 z-10 shadow-lg" : "border-slate-200",
@@ -1106,6 +1114,31 @@ export default function App() {
                 })}
               </div>
 
+              <div className="bg-white p-6 rounded-2xl border border-slate-200 space-y-4 shadow-sm">
+                <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 pb-2">Keterangan</h4>
+                <div className="grid grid-cols-1 gap-3">
+                  <div className="flex items-center gap-3 text-[10px] font-bold text-slate-600">
+                    <div className="w-4 h-4 rounded bg-[#2ecc71] border border-[#27ae60]" /> 
+                    <span>SUDAH DIJAWAB</span>
+                  </div>
+                  <div className="flex items-center gap-3 text-[10px] font-bold text-slate-600">
+                    <div className="w-4 h-4 rounded bg-[#f1c40f] border border-[#f39c12]" /> 
+                    <span>RAGU-RAGU</span>
+                  </div>
+                  <div className="flex items-center gap-3 text-[10px] font-bold text-slate-600">
+                    <div className="w-4 h-4 rounded bg-white border border-slate-200" /> 
+                    <span>BELUM DIJAWAB</span>
+                  </div>
+                </div>
+              </div>
+              {isStrictSimulation && (
+                <div className="bg-amber-50 border border-amber-200 p-4 rounded-xl text-[11px] font-bold text-amber-900 uppercase tracking-wider">
+                  Mode ketat aktif: hanya boleh maju, tidak bisa lompat nomor, dan penandaan ragu-ragu disimpan untuk evaluasi akhir.
+                </div>
+              )}
+
+              {session.isSubmitted && (
+                <button 
           {view === 'quiz' && session && currentQuestion && (
             <div className="min-h-screen bg-[#f8fafc] flex flex-col font-sans">
               <nav className="bg-[#1e293b] text-white px-6 py-4 flex justify-between items-center sticky top-0 z-50 shadow-xl" aria-label="Header ujian">
@@ -1210,6 +1243,57 @@ export default function App() {
             </div>
           </div>
 
+          {selectedReport.performancePrediction && (
+            <div className="bg-white rounded-[40px] p-8 border border-slate-200 shadow-sm">
+              <h3 className="text-xl font-black text-slate-900 mb-4">Prediksi Performa (Rentang + Confidence)</h3>
+              <div className="grid md:grid-cols-3 gap-4">
+                <div className="bg-slate-50 rounded-2xl p-5 border border-slate-200">
+                  <p className="text-[10px] uppercase tracking-widest font-black text-slate-400">Rentang Skor</p>
+                  <p className="text-2xl font-black text-slate-900">{selectedReport.performancePrediction.scoreRange[0]} - {selectedReport.performancePrediction.scoreRange[1]}</p>
+                </div>
+                <div className="bg-slate-50 rounded-2xl p-5 border border-slate-200">
+                  <p className="text-[10px] uppercase tracking-widest font-black text-slate-400">Confidence</p>
+                  <p className="text-2xl font-black text-indigo-700">{selectedReport.performancePrediction.confidenceLevel}</p>
+                </div>
+                <div className="bg-slate-50 rounded-2xl p-5 border border-slate-200">
+                  <p className="text-[10px] uppercase tracking-widest font-black text-slate-400">Interpretasi</p>
+                  <p className="text-sm font-semibold text-slate-700">{selectedReport.performancePrediction.summary}</p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {selectedReport.stabilityAnalysis && (
+            <div className="bg-white rounded-[40px] p-8 border border-slate-200 shadow-sm">
+              <h3 className="text-xl font-black text-slate-900 mb-4">Deteksi Pola Jawaban</h3>
+              <p className="text-sm font-bold mb-3">Status: <span className="text-indigo-700">{selectedReport.stabilityAnalysis.level}</span></p>
+              <ul className="list-disc pl-5 space-y-1 text-sm text-slate-600">
+                {(selectedReport.stabilityAnalysis.flags.length > 0 ? selectedReport.stabilityAnalysis.flags : ['Tidak ditemukan pola jawaban tidak stabil.']).map((flag, idx) => (
+                  <li key={idx}>{flag}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {selectedReport.weaknessPriorities && selectedReport.weaknessPriorities.length > 0 && (
+            <div className="bg-white rounded-[40px] p-8 border border-slate-200 shadow-sm">
+              <h3 className="text-xl font-black text-slate-900 mb-5">Laporan Prioritas Kelemahan Domain</h3>
+              <div className="space-y-3">
+                {selectedReport.weaknessPriorities.map((item, idx) => (
+                  <div key={idx} className="p-4 rounded-2xl border border-slate-200 bg-slate-50 flex items-center justify-between gap-4">
+                    <div>
+                      <p className="font-black text-slate-900">{item.domain}</p>
+                      <p className="text-sm text-slate-600">{item.recommendation}</p>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <p className="text-sm font-black text-slate-700">{item.accuracy}%</p>
+                      <p className="text-[10px] uppercase tracking-widest font-black text-rose-600">{item.priority}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
           <section className="bg-white rounded-[48px] border border-slate-200 p-6 md:p-8 shadow-sm space-y-5">
             <div className="flex items-center justify-between gap-4 flex-wrap">
               <h3 className="text-xl font-black text-slate-900">Cheat-Sheet Strategi 7 Hari</h3>

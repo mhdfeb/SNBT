@@ -82,4 +82,18 @@ export const QUESTIONS: Question[] = withQualityMetadata([
   ...MATEMATIKA_QUESTIONS,
   ...HOTS_QUESTIONS,
   ...SNBT2025_QUESTIONS
+];
+
+// Bank simulasi ketat dipisahkan agar pola latihan harian tidak overfit ke soal ujian
+export const SIMULATION_QUESTION_BANK: Question[] = [
+  ...HOTS_QUESTIONS,
+  ...SNBT2025_QUESTIONS,
+];
+
+export const TRAINING_QUESTION_BANK: Question[] = [
+  ...TPS_QUESTIONS,
+  ...LITERASI_ID_QUESTIONS,
+  ...LITERASI_EN_QUESTIONS,
+  ...MATEMATIKA_QUESTIONS,
+];
 ]);
