@@ -194,7 +194,9 @@ export function useQuiz() {
             ? {
                 ...subTest,
                 expiresAt:
-                  typeof subTest.expiresAt === 'number' ? now + Math.max(0, (subTest.timeLimit ?? 0) * 1000) : subTest.expiresAt,
+                  typeof subTest.timeLimit === 'number'
+                    ? now + Math.max(0, subTest.timeLimit * 1000)
+                    : subTest.expiresAt,
               }
             : subTest,
         ),
