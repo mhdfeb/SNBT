@@ -1,0 +1,20 @@
+<svg width="640" height="360" viewBox="0 0 640 360" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="litTitle litDesc">
+  <title id="litTitle">Pola membaca aktif literasi</title>
+  <desc id="litDesc">Contoh anotasi paragraf dan urutan identifikasi gagasan utama, bukti, serta inferensi.</desc>
+  <rect width="640" height="360" rx="28" fill="#FFF1F2"/>
+  <rect x="36" y="42" width="568" height="276" rx="22" fill="#fff"/>
+  <rect x="64" y="76" width="510" height="16" rx="8" fill="#FECDD3"/>
+  <rect x="64" y="106" width="462" height="12" rx="6" fill="#FED7AA"/>
+  <rect x="64" y="130" width="490" height="12" rx="6" fill="#FED7AA"/>
+  <rect x="64" y="154" width="430" height="12" rx="6" fill="#FED7AA"/>
+  <rect x="64" y="186" width="300" height="86" rx="14" fill="#4C1D95"/>
+  <circle cx="548" cy="208" r="34" fill="#FB7185"/>
+  <path d="M548 188V228" stroke="white" stroke-width="6" stroke-linecap="round"/>
+  <path d="M528 208H568" stroke="white" stroke-width="6" stroke-linecap="round"/>
+  <text x="76" y="88" fill="#9F1239" font-size="13" font-family="Inter, Arial" font-weight="700">Gagasan utama paragraf</text>
+  <text x="78" y="214" fill="#FBCFE8" font-size="15" font-family="Inter, Arial" font-weight="700">Checklist Literasi</text>
+  <text x="78" y="238" fill="#FDF2F8" font-size="13" font-family="Inter, Arial">1) Tesis penulis</text>
+  <text x="78" y="258" fill="#FDF2F8" font-size="13" font-family="Inter, Arial">2) Bukti eksplisit</text>
+  <text x="78" y="278" fill="#FDF2F8" font-size="13" font-family="Inter, Arial">3) Inferensi implisit</text>
+  <text x="504" y="264" fill="#BE123C" font-size="12" font-family="Inter, Arial" font-weight="700">Anotasi cepat</text>
+</svg>
