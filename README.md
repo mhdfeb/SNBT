@@ -8,10 +8,10 @@ Aplikasi latihan SNBT berbasis React + Vite dengan question bank terstruktur, mo
 
 ## Menjalankan Lokal
 
-**Prasyarat:** Node.js 20+
+**Prasyarat:** Node.js 20.11.x (disarankan konsisten di semua environment CI/CD).
 
 ```bash
-npm install
+npm ci
 cp .env.example .env.local
 npm run dev
 ```
@@ -49,3 +49,10 @@ Konfigurasi deploy ada di `vercel.json`:
 - SPA rewrite ke `index.html`
 
 Panduan detail deployment: [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md).
+
+
+## Stabilization Baseline
+
+- Branch stabilisasi: `stabilization/baseline-build`.
+- Baseline dipatok dari commit terakhir yang lolos build internal sebelum branch ini dibuat.
+- Dependency dikunci melalui `package-lock.json` dan instalasi wajib menggunakan `npm ci`.

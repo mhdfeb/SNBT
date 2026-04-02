@@ -1,107 +1,32 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AlertCircle, BookOpen, CheckCircle2, ChevronLeft, ChevronRight, Home, LoaderCircle, Target } from 'lucide-react';
+import {
+  AlertCircle,
+  BarChart3,
+  BookOpen,
+  CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
+  Home,
+  LoaderCircle,
+  Route,
+  Target,
+} from 'lucide-react';
 import { useQuiz } from './hooks/useQuiz';
 import { QUESTIONS } from './data/questions';
 import { PTN_DATA } from './data/ptn';
-import type { Question, QuestionAnswer } from './types/quiz';
-import { Button, Card, Field, StatePanel } from './components/ui';
+import { STUDY_MATERIALS } from './data/materials';
+import { PREDICTIONS_2026 } from './data/predictions2026';
+import { Button, Card, StatePanel } from './components/ui';
 import { trackEvent, trackPageView } from './lib/analytics';
 import { markMainPageRender, markQuestionNavigationLatency } from './lib/slo';
+import { QuestionRenderer } from './components/quiz/QuestionRenderer';
 
-function QuestionCard({
-  question,
-  answer,
-  onAnswer,
-  submitted,
-}: {
-  question: Question;
-  answer: QuestionAnswer;
-  onAnswer: (value: QuestionAnswer) => void;
-  submitted: boolean;
-}) {
-  const cardRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    cardRef.current?.focus();
-  }, [question.id]);
-
-  if (question.type === 'short_answer') {
-    return (
-      <Card>
-        <div ref={cardRef} tabIndex={-1} className="space-y-3 focus-visible:outline-none" aria-live="polite">
-          <p className="font-semibold text-slate-900">{question.question}</p>
-          <Field
-            label="Jawaban singkat"
-            type="number"
-            value={typeof answer === 'number' ? answer : ''}
-            disabled={submitted}
-            onChange={(e) => onAnswer(Number(e.target.value))}
-            placeholder="Masukkan jawaban"
-            aria-label="Input jawaban numerik"
-          />
-        </div>
-      </Card>
-    );
-  }
-
-  return (
-    <Card>
-      <div
-        ref={cardRef}
-        tabIndex={-1}
-        className="space-y-3 focus-visible:outline-none"
-        role="radiogroup"
-        aria-label="Pilihan jawaban"
-        aria-live="polite"
-      >
-        <p className="font-semibold text-slate-900">{question.question}</p>
-        <div className="space-y-2">
-          {question.options?.map((option, idx) => {
-            const selected = answer === idx;
-            return (
-              <button
-                key={`${question.id}-${idx}`}
-                type="button"
-                role="radio"
-                aria-checked={selected}
-                aria-label={`Opsi ${String.fromCharCode(65 + idx)}: ${option}`}
-                disabled={submitted}
-                onClick={() => onAnswer(idx)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    onAnswer(idx);
-                  }
-                }}
-                className={`w-full rounded-xl border p-3 text-left transition focus-visible:outline-3 focus-visible:outline-indigo-500 ${
-                  selected ? 'border-indigo-700 bg-indigo-100 text-indigo-950' : 'border-slate-300 hover:border-slate-400'
-                }`}
-              >
-                {String.fromCharCode(65 + idx)}. {option}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-    </Card>
-  );
-}
+type AppView = 'dashboard' | 'tryout' | 'simulation' | 'target' | 'materials' | 'review';
 
 export default function App() {
-  const {
-    session,
-    progress,
-    startSession,
-    answerQuestion,
-    nextQuestion,
-    prevQuestion,
-    submitQuiz,
-    nextSubTest,
-    setSession,
-    setTarget,
-  } = useQuiz();
+  const { session, progress, startSession, answerQuestion, nextQuestion, prevQuestion, submitQuiz, nextSubTest, setSession, setTarget } = useQuiz();
 
-  const [view, setView] = useState<AppView>('home');
+  const [view, setView] = useState<AppView>('dashboard');
   const [now, setNow] = useState(() => Date.now());
   const [isBootLoading, setBootLoading] = useState(true);
   const [appError, setAppError] = useState<string | null>(null);
@@ -121,7 +46,7 @@ export default function App() {
     const timeout = window.setTimeout(() => {
       setBootLoading(false);
       markMainPageRender(startedAt);
-    }, 250);
+    }, 200);
     return () => window.clearTimeout(timeout);
   }, []);
 
@@ -129,61 +54,24 @@ export default function App() {
     trackPageView(`/${view}`);
   }, [view]);
 
-
-  useEffect(() => {
-    if (view === 'result') {
-      trackEvent('view_recommendation', { report_count: progress.reports?.length ?? 0 });
-    }
-  }, [view, progress.reports]);
-
-  const startQuickQuiz = () => {
-    try {
-      startSession('mini');
-      trackEvent('start_quiz', { mode: 'mini' });
-      setView('quiz');
-    } catch (error) {
-      setAppError('Gagal memulai kuis. Silakan coba lagi.');
-      console.error(error);
-    }
-  };
-
-  const finishQuiz = () => {
-    submitQuiz();
-    trackEvent('submit_quiz', {
-      answered_count: Object.keys(session?.answers ?? {}).length,
-      total_questions: session?.questions.length ?? 0,
-    });
-    setView('result');
-  };
-
   useEffect(() => {
     const id = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(id);
   }, []);
 
   useEffect(() => {
-    if (view !== 'quiz' || !session?.subTests?.length || session.isSubmitted) return;
+    if (!selectedPtnData) return;
+    if (!selectedPtnData.prodi.some((prodi) => prodi.id === selectedProdi)) {
+      setSelectedProdi(selectedPtnData.prodi[0]?.id ?? '');
+    }
+  }, [selectedPtnData, selectedProdi]);
 
+  useEffect(() => {
+    if (!session?.subTests?.length || session.isSubmitted) return;
     const currentSubTest = session.subTests[session.currentSubTestIdx ?? 0];
     if (!currentSubTest?.expiresAt) return;
-
-    if (Date.now() >= currentSubTest.expiresAt) {
-      nextSubTest();
-    }
-  }, [nextSubTest, session, view, now]);
-
-  useEffect(() => {
-    if (view !== 'quiz' || !session?.isSubmitted) return;
-    submitQuiz();
-    setView('result');
-  }, [session?.isSubmitted, submitQuiz, view]);
-
-  useEffect(() => {
-    if (!selectedPtn) return;
-    if (!selectedPtn.prodi.some((prodi) => prodi.id === selectedProdiId)) {
-      setSelectedProdiId(selectedPtn.prodi[0]?.id ?? '');
-    }
-  }, [selectedPtn, selectedProdiId]);
+    if (Date.now() >= currentSubTest.expiresAt) nextSubTest();
+  }, [nextSubTest, now, session]);
 
   const activeSubTest = useMemo(() => {
     if (!session?.subTests?.length) return null;
@@ -195,16 +83,32 @@ export default function App() {
     return Math.max(0, Math.ceil((activeSubTest.expiresAt - now) / 1000));
   }, [activeSubTest, now]);
 
+  const startMode = (mode: 'tryout' | 'simulation') => {
+    try {
+      startSession(mode);
+      trackEvent('start_session', { mode });
+      setView(mode);
+    } catch (error) {
+      console.error(error);
+      setAppError('Gagal memulai sesi. Silakan ulangi.');
+    }
+  };
+
   const handleQuestionMove = (action: 'prev' | 'next') => {
     navStartRef.current = performance.now();
-    if (action === 'next') {
-      nextQuestion();
-    } else {
-      prevQuestion();
-    }
-    requestAnimationFrame(() => {
-      markQuestionNavigationLatency(performance.now() - navStartRef.current);
+    if (action === 'next') nextQuestion();
+    else prevQuestion();
+    requestAnimationFrame(() => markQuestionNavigationLatency(performance.now() - navStartRef.current));
+  };
+
+  const finishQuiz = () => {
+    submitQuiz();
+    trackEvent('submit_session', {
+      mode: session?.mode ?? 'unknown',
+      answered_count: Object.keys(session?.answers ?? {}).length,
+      total_questions: session?.questions.length ?? 0,
     });
+    setView('review');
   };
 
   const applyTarget = () => {
@@ -217,185 +121,128 @@ export default function App() {
 
   if (isBootLoading) {
     return (
-      <main className="mx-auto flex min-h-screen max-w-3xl items-center px-6 py-10">
-        <StatePanel
-          kind="loading"
-          title="Menyiapkan dashboard SNBT"
-          description="Sedang memuat bank soal dan progres terakhir Anda."
-          action={<LoaderCircle className="animate-spin" aria-hidden="true" />}
-        />
+      <main className="mx-auto flex min-h-screen max-w-5xl items-center px-6 py-10">
+        <StatePanel kind="loading" title="Menyiapkan SNBT Practice Arena" description="Memuat bank soal, report, dan preferensi target PTN." action={<LoaderCircle className="animate-spin" />} />
       </main>
     );
   }
 
   if (appError) {
     return (
-      <main className="mx-auto flex min-h-screen max-w-3xl items-center px-6 py-10">
+      <main className="mx-auto flex min-h-screen max-w-5xl items-center px-6 py-10">
         <StatePanel
           kind="error"
           title="Terjadi kendala"
           description={appError}
-          action={
-            <Button variant="secondary" onClick={() => setAppError(null)} aria-label="Coba lagi">
-              <AlertCircle size={16} /> Coba lagi
-            </Button>
-          }
+          action={<Button variant="secondary" onClick={() => setAppError(null)}><AlertCircle size={16} /> Coba lagi</Button>}
         />
       </main>
     );
   }
 
-  if (view === 'home') {
-    return (
-      <main className="mx-auto flex min-h-screen max-w-3xl flex-col justify-center gap-6 px-6 py-10">
-        <h1 className="text-3xl font-bold text-slate-950">SNBT Practice Arena</h1>
-        <p className="text-slate-700">
-          Bank soal aktif: <span className="font-semibold text-slate-900">{QUESTIONS.length}</span> soal.
-        </p>
+  const isQuizView = view === 'tryout' || view === 'simulation';
 
+  return (
+    <main className="mx-auto flex min-h-screen max-w-5xl flex-col gap-6 px-6 py-10">
+      <header className="space-y-4">
+        <h1 className="text-3xl font-bold text-slate-950">SNBT Practice Arena</h1>
+        <div className="flex flex-wrap gap-2">
+          <Button variant={view === 'dashboard' ? 'primary' : 'secondary'} onClick={() => setView('dashboard')}><Home size={16} /> Dashboard</Button>
+          <Button variant={view === 'tryout' ? 'primary' : 'secondary'} onClick={() => startMode('tryout')}><Target size={16} /> Tryout</Button>
+          <Button variant={view === 'simulation' ? 'primary' : 'secondary'} onClick={() => startMode('simulation')}><Route size={16} /> Simulation</Button>
+          <Button variant={view === 'target' ? 'primary' : 'secondary'} onClick={() => setView('target')}><Target size={16} /> Target PTN</Button>
+          <Button variant={view === 'materials' ? 'primary' : 'secondary'} onClick={() => setView('materials')}><BookOpen size={16} /> Materi</Button>
+          <Button variant={view === 'review' ? 'primary' : 'secondary'} onClick={() => setView('review')}><BarChart3 size={16} /> Review</Button>
+        </div>
+      </header>
+
+      {view === 'dashboard' && (
+        <div className="grid gap-4 md:grid-cols-2">
+          <Card>
+            <h2 className="font-bold">Ringkasan Kesiapan</h2>
+            <p>Bank soal: <strong>{QUESTIONS.length}</strong></p>
+            <p>Readiness index terakhir: <strong>{progress.reports?.[0]?.readinessIndex ?? 0}</strong></p>
+            <p>Trend sesi: <strong>{progress.reports?.slice(0, 3).map((r) => r.totalScore).join(' → ') || 'Belum ada data'}</strong></p>
+          </Card>
+          <Card>
+            <h2 className="font-bold">Insight Prediksi 2026</h2>
+            <ul className="list-disc space-y-1 pl-5 text-sm text-slate-700">
+              {PREDICTIONS_2026.slice(0, 3).map((item) => <li key={item.id}>{item.title}</li>)}
+            </ul>
+          </Card>
+        </div>
+      )}
+
+      {view === 'target' && (
         <Card className="space-y-3">
-          <h2 className="font-bold text-slate-900">Target PTN</h2>
+          <h2 className="font-bold text-slate-900">Target PTN & Prodi</h2>
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="space-y-1 text-sm font-semibold text-slate-800">
               <span>Pilih PTN</span>
-              <select
-                className="w-full rounded-xl border border-slate-300 p-2"
-                value={selectedPtn}
-                onChange={(e) => {
-                  const nextPtn = e.target.value;
-                  setSelectedPtn(nextPtn);
-                  setSelectedProdi(PTN_DATA.find((ptn) => ptn.id === nextPtn)?.prodi[0]?.id ?? '');
-                }}
-                aria-label="Pilih perguruan tinggi negeri"
-              >
-                {PTN_DATA.map((ptn) => (
-                  <option key={ptn.id} value={ptn.id}>
-                    {ptn.name}
-                  </option>
-                ))}
+              <select className="w-full rounded-xl border border-slate-300 p-2" value={selectedPtn} onChange={(e) => setSelectedPtn(e.target.value)}>
+                {PTN_DATA.map((ptn) => <option key={ptn.id} value={ptn.id}>{ptn.name}</option>)}
               </select>
             </label>
             <label className="space-y-1 text-sm font-semibold text-slate-800">
               <span>Pilih Prodi</span>
-              <select
-                className="w-full rounded-xl border border-slate-300 p-2"
-                value={selectedProdi}
-                onChange={(e) => setSelectedProdi(e.target.value)}
-                aria-label="Pilih program studi"
-              >
-                {(selectedPtnData?.prodi ?? []).map((prodi) => (
-                  <option key={prodi.id} value={prodi.id}>
-                    {prodi.name}
-                  </option>
-                ))}
+              <select className="w-full rounded-xl border border-slate-300 p-2" value={selectedProdi} onChange={(e) => setSelectedProdi(e.target.value)}>
+                {(selectedPtnData?.prodi ?? []).map((prodi) => <option key={prodi.id} value={prodi.id}>{prodi.name}</option>)}
               </select>
             </label>
           </div>
-          <Button variant="secondary" onClick={applyTarget} aria-label="Tetapkan target PTN">
-            Tetapkan Target
-          </Button>
+          <Button variant="secondary" onClick={applyTarget}>Tetapkan Target</Button>
         </Card>
+      )}
 
-        <Button type="button" onClick={startQuickQuiz} className="w-fit" aria-label="Mulai quiz cepat">
-          <Target size={18} /> Mulai Quiz Cepat
-        </Button>
-      </main>
-    );
-  }
-
-  if (view === 'result') {
-    return (
-      <main className="mx-auto flex min-h-screen max-w-3xl flex-col justify-center gap-4 px-6 py-10">
-        <h2 className="text-2xl font-bold text-slate-950">Quiz selesai</h2>
-        {(progress.reports?.length ?? 0) === 0 ? (
-          <StatePanel
-            kind="empty"
-            title="Belum ada riwayat"
-            description="Belum ada laporan kuis tersimpan. Mulai kuis untuk melihat rekomendasi belajar."
-          />
-        ) : (
-          <Card>
-            <p className="text-slate-700">
-              Total sesi tersimpan: <span className="font-semibold text-slate-900">{progress.reports?.length ?? 0}</span>
-            </p>
-          </Card>
-        )}
-        <Button
-          type="button"
-          variant="secondary"
-          onClick={() => {
-            setSession(null);
-            setView('home');
-          }}
-          className="w-fit"
-          aria-label="Kembali ke beranda"
-        >
-          <Home size={18} /> Kembali ke beranda
-        </Button>
-      </main>
-    );
-  }
-
-  return (
-    <main className="mx-auto flex min-h-screen max-w-3xl flex-col gap-6 px-6 py-10">
-      <header className="flex items-center justify-between">
-        <h2 className="inline-flex items-center gap-2 text-xl font-bold text-slate-950">
-          <BookOpen size={20} /> Mode Quiz
-        </h2>
-        <div className="text-right">
-          <span className="block text-sm text-slate-700" aria-live="polite">
-            {session ? `${session.currentIdx + 1}/${session.questions.length}` : '0/0'}
-          </span>
-          {activeSubTest && subTestRemainingSec !== null ? (
-            <span className="block text-xs font-semibold text-amber-800">
-              {activeSubTest.name}: {subTestRemainingSec}s
-            </span>
-          ) : null}
+      {view === 'materials' && (
+        <div className="grid gap-3 md:grid-cols-2">
+          {STUDY_MATERIALS.slice(0, 6).map((material) => (
+            <Card key={material.id}>
+              <h3 className="font-semibold">{material.title}</h3>
+              <p className="text-sm text-slate-600">{material.summary}</p>
+            </Card>
+          ))}
         </div>
-      </header>
+      )}
 
-      {session && currentQuestion ? (
-        <>
-          <QuestionRenderer
-            question={currentQuestion}
-            answer={session.answers[currentQuestion.id]}
-            onAnswer={answerQuestion}
-            submitted={session.isSubmitted}
-          />
+      {view === 'review' && (
+        <Card className="space-y-2">
+          <h2 className="font-bold text-slate-900">Laporan Lengkap</h2>
+          {progress.reports?.length ? (
+            <>
+              <p>Readiness: <strong>{progress.reports[0]?.readinessScore}</strong></p>
+              <p>Gap subtes: {JSON.stringify(progress.reports[0]?.gapBySubTest ?? {})}</p>
+              <p>Rekomendasi fokus: {(progress.reports[0]?.focusRecommendations ?? []).join(', ') || 'Belum tersedia'}</p>
+            </>
+          ) : (
+            <p className="text-slate-600">Belum ada report. Jalankan tryout/simulation dulu.</p>
+          )}
+        </Card>
+      )}
 
-          <div className="flex items-center justify-between gap-3">
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() => handleQuestionMove('prev')}
-              disabled={session.currentIdx === 0}
-              aria-label="Pindah ke soal sebelumnya"
-            >
-              <ChevronLeft size={16} /> Sebelumnya
-            </Button>
-
-            {session.currentIdx === session.questions.length - 1 ? (
-              <Button type="button" variant="success" onClick={finishQuiz} aria-label="Submit kuis">
-                <CheckCircle2 size={16} /> Submit
-              </Button>
-            ) : (
-              <Button type="button" onClick={() => handleQuestionMove('next')} aria-label="Pindah ke soal berikutnya">
-                Berikutnya <ChevronRight size={16} />
-              </Button>
-            )}
+      {isQuizView && (
+        <section className="space-y-3">
+          <div className="flex items-center justify-between">
+            <span className="font-semibold">{session ? `${session.currentIdx + 1}/${session.questions.length}` : '0/0'}</span>
+            {activeSubTest && subTestRemainingSec !== null ? <span className="text-sm text-amber-700">{activeSubTest.name}: {subTestRemainingSec}s</span> : null}
           </div>
-        </>
-      ) : (
-        <StatePanel
-          kind="empty"
-          title="Tidak ada sesi aktif"
-          description="Sesi kuis belum tersedia. Kembali ke beranda untuk memulai sesi baru."
-          action={
-            <Button variant="secondary" onClick={() => setView('home')}>
-              <Home size={16} /> Ke Beranda
-            </Button>
-          }
-        />
+          {session && currentQuestion ? (
+            <>
+              <QuestionRenderer question={currentQuestion} answer={session.answers[currentQuestion.id] ?? null} onAnswer={answerQuestion} submitted={session.isSubmitted} />
+              <div className="flex items-center justify-between gap-2">
+                <Button variant="secondary" onClick={() => handleQuestionMove('prev')} disabled={session.currentIdx === 0}><ChevronLeft size={16} /> Sebelumnya</Button>
+                {session.currentIdx === session.questions.length - 1 ? (
+                  <Button variant="success" onClick={finishQuiz}><CheckCircle2 size={16} /> Submit</Button>
+                ) : (
+                  <Button onClick={() => handleQuestionMove('next')}>Berikutnya <ChevronRight size={16} /></Button>
+                )}
+              </div>
+            </>
+          ) : (
+            <StatePanel kind="empty" title="Tidak ada sesi aktif" description="Mulai tryout atau simulation untuk melanjutkan." action={<Button variant="secondary" onClick={() => setView('dashboard')}>Kembali</Button>} />
+          )}
+          <Button variant="secondary" onClick={() => { setSession(null); setView('dashboard'); }}>Akhiri sesi</Button>
+        </section>
       )}
     </main>
   );

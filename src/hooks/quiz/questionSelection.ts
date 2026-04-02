@@ -83,7 +83,7 @@ const takeWithFallback = (preferredPool: Question[], fallbackPool: Question[], c
 };
 
 export const buildSubTestConfig = (mode: QuizSession['mode']): SubTestConfig[] => {
-  if (mode === 'tryout' || mode === 'simulation') return GOVERNANCE_SUBTEST_CONFIG;
+  if (mode === 'tryout' || mode === 'simulation') return DEFAULT_SUBTEST_CONFIG;
   return [];
 };
 
