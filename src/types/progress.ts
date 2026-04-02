@@ -90,7 +90,7 @@ export interface UserProgress {
   simulationReports: AssessmentReport[];
   materialMastery: { [concept: string]: number };
   drillHistory?: TargetedDrillResult[];
-  subTestHistory: SubTestHistoryEntry[] | { [subTestName: string]: SubTestHistoryEntry[] };
+  subTestHistory: { [subTestName: string]: SubTestHistoryEntry[] };
   questionUsage?: { [questionId: string]: { shownCount: number; lastShownAt: string | null } };
   questionPerformance?: { [questionId: string]: { attempts: number; wrong: number } };
   questionHistory?: { [questionId: string]: QuestionHistoryItem };
