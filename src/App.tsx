@@ -352,11 +352,18 @@ export default function App() {
   const targetPtn = PTN_DATA.find((ptn) => ptn.id === progress.target?.ptnId);
   const targetProdi = targetPtn?.prodi.find((prodi) => prodi.id === progress.target?.prodiId);
 
+  useEffect(() => {
+    if (view === 'report' && !selectedReport && progress.reports.length > 0) {
+      setSelectedReport(progress.reports[0]);
+    }
+  }, [view, selectedReport, progress.reports]);
+
   const getModeName = (mode: string) => {
     switch(mode) {
       case 'mini': return 'Mini Tryout';
       case 'daily': return 'Latihan Harian';
       case 'tryout': return 'Tryout Full';
+      case 'simulation': return 'Simulasi Premium';
       case 'simulation': return 'Simulasi Ketat';
       case 'category': return 'Latihan Kategori';
       case 'drill15': return 'Targeted Drill 15 Menit';
@@ -517,6 +524,13 @@ export default function App() {
                 className="ui-btn-primary px-10 py-5 rounded-[24px] shadow-xl shadow-indigo-900/40 group text-sm uppercase tracking-widest"
               >
                 Mulai Tryout Full
+                <ArrowRight size={20} className="group-hover:translate-x-2 transition-transform" />
+              </button>
+              <button 
+                onClick={() => handleStart('simulation')}
+                className="bg-violet-600 text-white px-10 py-5 rounded-[24px] font-black hover:bg-violet-500 transition-all shadow-xl shadow-violet-900/40 flex items-center gap-4 group text-sm uppercase tracking-widest"
+              >
+                Simulasi Premium
                 <ArrowRight size={20} className="group-hover:translate-x-2 transition-transform" />
               </button>
               <button 
@@ -785,6 +799,7 @@ export default function App() {
             { id: 'simulation', title: 'Simulasi Ketat', desc: 'Mode ujian resmi: timer sub-tes, navigasi terbatas, bank soal terpisah.', icon: School, color: 'bg-slate-900', shadow: 'shadow-slate-300' },
             { id: 'mini', title: 'Mini Tryout', desc: '10 Soal campuran untuk latihan cepat 15 menit.', icon: Zap, color: 'bg-amber-500', shadow: 'shadow-amber-200' },
             { id: 'daily', title: 'Latihan Harian', desc: '5 Soal adaptif berdasarkan kelemahanmu.', icon: Target, color: 'bg-indigo-500', shadow: 'shadow-indigo-200' },
+            { id: 'simulation', title: 'Simulasi Premium', desc: 'CBT full dengan urutan sub-tes resmi, timer ketat, dan analisis panic zone.', icon: Trophy, color: 'bg-violet-600', shadow: 'shadow-violet-200' },
             { id: 'drill15', title: 'Targeted Drill 15 Menit', desc: 'Fokus otomatis ke 2-3 konsep terlemah dengan spaced repetition.', icon: AlertTriangle, color: 'bg-rose-500', shadow: 'shadow-rose-200' },
             { id: 'study', title: 'Belajar Mandiri', desc: 'Pahami konsep materi secara mendalam.', icon: BookOpen, color: 'bg-emerald-500', shadow: 'shadow-emerald-200' },
           ].map((feature) => (
@@ -1465,6 +1480,61 @@ export default function App() {
           </div>
 
           <div className="grid lg:grid-cols-2 gap-10">
+            {selectedReport.simulationAnalysis && (
+              <div className="lg:col-span-2 bg-white rounded-[56px] p-10 border border-slate-200 shadow-sm space-y-8">
+                <h3 className="text-2xl font-black text-slate-900">Analisis Pasca-Simulasi Premium</h3>
+                <div className="grid md:grid-cols-3 gap-6">
+                  {[
+                    { label: 'Akurasi', value: `${selectedReport.simulationAnalysis.accuracy}%` },
+                    { label: 'Speed', value: `${selectedReport.simulationAnalysis.speed}%` },
+                    { label: 'Stability Under Time Pressure', value: `${selectedReport.simulationAnalysis.stability}%` },
+                  ].map((metric) => (
+                    <div key={metric.label} className="bg-slate-50 rounded-3xl border border-slate-100 p-6">
+                      <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">{metric.label}</p>
+                      <p className="text-4xl font-black text-slate-900 mt-2">{metric.value}</p>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="grid md:grid-cols-2 gap-6">
+                  <div className="bg-rose-50 border border-rose-100 rounded-3xl p-6 space-y-4">
+                    <h4 className="font-black text-rose-900">Panic Zone</h4>
+                    {selectedReport.simulationAnalysis.panicZones.length > 0 ? (
+                      <div className="space-y-3">
+                        {selectedReport.simulationAnalysis.panicZones.map((zone, idx) => (
+                          <div key={`${zone.label}-${idx}`} className="flex items-center justify-between bg-white rounded-2xl p-4 border border-rose-100">
+                            <p className="font-bold text-slate-700 text-sm">{zone.label}</p>
+                            <span className="text-rose-600 font-black">{zone.drop}% drop</span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-sm font-medium text-slate-600">Belum ada panic zone signifikan. Pertahankan ritme pengerjaan.</p>
+                    )}
+                  </div>
+
+                  <div className="bg-indigo-50 border border-indigo-100 rounded-3xl p-6 space-y-4">
+                    <h4 className="font-black text-indigo-900">Rencana Remedial Otomatis Minggu Depan</h4>
+                    <p className="text-sm text-slate-700">
+                      Mulai: {new Date(selectedReport.simulationAnalysis.remedialPlan.weekStart).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {selectedReport.simulationAnalysis.remedialPlan.focusConcepts.map((concept) => (
+                        <span key={concept} className="px-3 py-1 rounded-full bg-white border border-indigo-200 text-xs font-black text-indigo-700">
+                          {concept}
+                        </span>
+                      ))}
+                    </div>
+                    <ul className="list-disc list-inside text-sm text-slate-700 space-y-1">
+                      {selectedReport.simulationAnalysis.remedialPlan.actions.map((action, idx) => (
+                        <li key={idx}>{action}</li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            )}
+
             <div className="bg-white rounded-[56px] p-10 border border-slate-200 shadow-sm space-y-10">
               <div className="flex items-center justify-between">
                 <h3 className="text-2xl font-black text-slate-900 flex items-center gap-4">

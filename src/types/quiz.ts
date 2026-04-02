@@ -250,6 +250,22 @@ export interface ConceptEvaluation {
   }[];
 }
 
+export interface SimulationAnalysis {
+  accuracy: number; // 0-100
+  speed: number; // 0-100
+  stability: number; // 0-100
+  panicZones: {
+    label: string;
+    type: 'time' | 'concept';
+    drop: number; // performance drop percentage
+  }[];
+  remedialPlan: {
+    weekStart: string;
+    focusConcepts: Concept[];
+    actions: string[];
+  };
+}
+
 export interface AssessmentReport {
   id: string;
   date: string;
@@ -267,6 +283,7 @@ export interface AssessmentReport {
     prodi: string;
     chance: number; // 0-100
   }[];
+  simulationAnalysis?: SimulationAnalysis;
   readinessIndex: number;
   trendSessions: number;
   consistency: number;
@@ -339,6 +356,7 @@ export interface QuizSession {
   answerTimeline?: { [questionId: string]: number[] }; // timestamps for answer changes
   startTime: number;
   timePerQuestion: { [questionId: string]: number };
+  questionStartedAt: number;
   isSubmitted: boolean;
   subTests?: {
     name: string;

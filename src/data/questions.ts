@@ -86,6 +86,7 @@ export const QUESTIONS: Question[] = withQualityMetadata([
   ...LITERASI_ID_QUESTIONS,
   ...LITERASI_EN_QUESTIONS,
   ...MATEMATIKA_QUESTIONS,
+  ...HOTS_QUESTIONS
   ...HOTS_QUESTIONS,
   ...SNBT2025_QUESTIONS,
 ];
