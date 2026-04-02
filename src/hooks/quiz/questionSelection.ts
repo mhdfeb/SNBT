@@ -1,8 +1,12 @@
+import { SUBTEST_BLUEPRINTS } from '../../data/questionGovernance';
 import type { Category, Question, QuizSession, UserProgress } from '../../types/quiz';
 
 const shuffle = <T,>(items: T[]): T[] => [...items].sort(() => Math.random() - 0.5);
 
 const take = <T,>(items: T[], count: number): T[] => items.slice(0, Math.max(0, count));
+
+const SECONDS_PER_QUESTION = 60;
+const MIN_SUBTEST_FILL_RATIO_WARNING = 0.7;
 
 export interface SubTestConfig {
   name: string;
@@ -11,12 +15,62 @@ export interface SubTestConfig {
   category?: Category;
 }
 
-const DEFAULT_SUBTEST_CONFIG: SubTestConfig[] = [
-  { name: 'TPS', questionCount: 30, timeLimitSec: 30 * 60, category: 'TPS' },
-  { name: 'Literasi Indonesia', questionCount: 20, timeLimitSec: 20 * 60, category: 'Literasi Indonesia' },
-  { name: 'Literasi Inggris', questionCount: 20, timeLimitSec: 20 * 60, category: 'Literasi Inggris' },
-  { name: 'Penalaran Matematika', questionCount: 20, timeLimitSec: 20 * 60, category: 'Penalaran Matematika' },
+const PRODUCT_SUBTEST_CONFIG: SubTestConfig[] = [
+  { name: 'Penalaran Induktif', questionCount: 10, timeLimitSec: 10 * SECONDS_PER_QUESTION, category: 'TPS' },
+  { name: 'Penalaran Deduktif', questionCount: 10, timeLimitSec: 10 * SECONDS_PER_QUESTION, category: 'TPS' },
+  { name: 'Penalaran Kuantitatif', questionCount: 10, timeLimitSec: 10 * SECONDS_PER_QUESTION, category: 'TPS' },
+  {
+    name: 'Pengetahuan & Pemahaman Umum',
+    questionCount: 20,
+    timeLimitSec: 20 * SECONDS_PER_QUESTION,
+    category: 'TPS',
+  },
+  {
+    name: 'Pemahaman Bacaan & Menulis',
+    questionCount: 20,
+    timeLimitSec: 20 * SECONDS_PER_QUESTION,
+    category: 'TPS',
+  },
+  { name: 'Pengetahuan Kuantitatif', questionCount: 15, timeLimitSec: 15 * SECONDS_PER_QUESTION, category: 'TPS' },
+  {
+    name: 'Literasi Bahasa Indonesia',
+    questionCount: 30,
+    timeLimitSec: 30 * SECONDS_PER_QUESTION,
+    category: 'Literasi Indonesia',
+  },
+  {
+    // Explicit subtest naming is aligned with question governance metadata.
+    name: 'Literasi Bahasa Inggris',
+    questionCount: 20,
+    timeLimitSec: 20 * SECONDS_PER_QUESTION,
+    category: 'Literasi Inggris',
+  },
+  {
+    name: 'Penalaran Matematika',
+    questionCount: 20,
+    timeLimitSec: 20 * SECONDS_PER_QUESTION,
+    category: 'Penalaran Matematika',
+  },
 ];
+
+const DEFAULT_SUBTEST_CONFIG: SubTestConfig[] = SUBTEST_BLUEPRINTS.map((blueprint) => {
+  const configured = PRODUCT_SUBTEST_CONFIG.find((subtest) => subtest.name === blueprint.subtest);
+
+  if (!configured) {
+    return {
+      name: blueprint.subtest,
+      category: blueprint.category,
+      questionCount: blueprint.quota,
+      timeLimitSec: blueprint.quota * SECONDS_PER_QUESTION,
+    };
+  }
+
+  return {
+    ...configured,
+    category: blueprint.category,
+    questionCount: blueprint.quota,
+  };
+});
 
 const takeWithFallback = (preferredPool: Question[], fallbackPool: Question[], count: number): Question[] => {
   const preferred = take(shuffle(preferredPool), count);
@@ -66,6 +120,13 @@ export const pickQuestionsByMode = (
       const cleanCategoryPool = perCategoryPool.filter((question) => !usedQuestionIds.has(question.id));
       const cleanFallbackPool = mixed.filter((question) => !usedQuestionIds.has(question.id));
       const chunk = takeWithFallback(cleanCategoryPool, cleanFallbackPool, subTest.questionCount);
+
+      const minExpectedCount = Math.ceil(subTest.questionCount * MIN_SUBTEST_FILL_RATIO_WARNING);
+      if (chunk.length < minExpectedCount) {
+        console.warn(
+          `[questionSelection] Subtest "${subTest.name}" selected ${chunk.length}/${subTest.questionCount} questions (category: ${subTest.category ?? 'ALL'}).`,
+        );
+      }
 
       for (const question of chunk) usedQuestionIds.add(question.id);
       selected.push(...chunk);

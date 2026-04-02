@@ -1,23 +1,12 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import {
-  BookOpen,
-  CheckCircle2,
-  ChevronLeft,
-  ChevronRight,
-  Compass,
-  Home,
-  LineChart,
-  Sparkles,
-  Target,
-} from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { AlertCircle, BookOpen, CheckCircle2, ChevronLeft, ChevronRight, Home, LoaderCircle, Target } from 'lucide-react';
 import { useQuiz } from './hooks/useQuiz';
 import { QUESTIONS } from './data/questions';
 import { PTN_DATA } from './data/ptn';
-import { STUDY_MATERIALS } from './data/materials';
-import { PREDICTIONS_2026 } from './data/predictions2026';
-import type { AssessmentReport, Concept, PTN, Prodi, Question, QuestionAnswer } from './types/quiz';
-
-type Screen = 'Dashboard' | 'Tryout' | 'Simulation' | 'Target PTN' | 'Materi' | 'Review';
+import type { Question, QuestionAnswer } from './types/quiz';
+import { Button, Card, Field, StatePanel } from './components/ui';
+import { trackEvent, trackPageView } from './lib/analytics';
+import { markMainPageRender, markQuestionNavigationLatency } from './lib/slo';
 
 function QuestionCard({
   question,
@@ -30,44 +19,71 @@ function QuestionCard({
   onAnswer: (value: QuestionAnswer) => void;
   submitted: boolean;
 }) {
+  const cardRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    cardRef.current?.focus();
+  }, [question.id]);
+
   if (question.type === 'short_answer') {
     return (
-      <div className="space-y-3">
-        <p className="font-semibold text-slate-700">{question.question}</p>
-        <input
-          type="number"
-          className="w-full rounded-lg border border-slate-300 p-3"
-          value={typeof answer === 'number' ? answer : ''}
-          disabled={submitted}
-          onChange={(e) => onAnswer(Number(e.target.value))}
-          placeholder="Masukkan jawaban"
-        />
-      </div>
+      <Card>
+        <div ref={cardRef} tabIndex={-1} className="space-y-3 focus-visible:outline-none" aria-live="polite">
+          <p className="font-semibold text-slate-900">{question.question}</p>
+          <Field
+            label="Jawaban singkat"
+            type="number"
+            value={typeof answer === 'number' ? answer : ''}
+            disabled={submitted}
+            onChange={(e) => onAnswer(Number(e.target.value))}
+            placeholder="Masukkan jawaban"
+            aria-label="Input jawaban numerik"
+          />
+        </div>
+      </Card>
     );
   }
 
   return (
-    <div className="space-y-3">
-      <p className="font-semibold text-slate-700">{question.question}</p>
-      <div className="space-y-2">
-        {question.options?.map((option, idx) => {
-          const selected = answer === idx;
-          return (
-            <button
-              key={`${question.id}-${idx}`}
-              type="button"
-              disabled={submitted}
-              onClick={() => onAnswer(idx)}
-              className={`w-full rounded-lg border p-3 text-left transition ${
-                selected ? 'border-indigo-500 bg-indigo-50' : 'border-slate-200 hover:border-slate-300'
-              }`}
-            >
-              {String.fromCharCode(65 + idx)}. {option}
-            </button>
-          );
-        })}
+    <Card>
+      <div
+        ref={cardRef}
+        tabIndex={-1}
+        className="space-y-3 focus-visible:outline-none"
+        role="radiogroup"
+        aria-label="Pilihan jawaban"
+        aria-live="polite"
+      >
+        <p className="font-semibold text-slate-900">{question.question}</p>
+        <div className="space-y-2">
+          {question.options?.map((option, idx) => {
+            const selected = answer === idx;
+            return (
+              <button
+                key={`${question.id}-${idx}`}
+                type="button"
+                role="radio"
+                aria-checked={selected}
+                aria-label={`Opsi ${String.fromCharCode(65 + idx)}: ${option}`}
+                disabled={submitted}
+                onClick={() => onAnswer(idx)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    onAnswer(idx);
+                  }
+                }}
+                className={`w-full rounded-xl border p-3 text-left transition focus-visible:outline-3 focus-visible:outline-indigo-500 ${
+                  selected ? 'border-indigo-700 bg-indigo-100 text-indigo-950' : 'border-slate-300 hover:border-slate-400'
+                }`}
+              >
+                {String.fromCharCode(65 + idx)}. {option}
+              </button>
+            );
+          })}
+        </div>
       </div>
-    </div>
+    </Card>
   );
 }
 
@@ -87,67 +103,59 @@ export default function App() {
     setTarget,
   } = useQuiz();
 
-  const [screen, setScreen] = useState<Screen>('Dashboard');
+  const [view, setView] = useState<AppView>('home');
   const [now, setNow] = useState(() => Date.now());
-  const [latestReport, setLatestReport] = useState<AssessmentReport | null>(null);
-  const [selectedPtnId, setSelectedPtnId] = useState<string>(PTN_DATA[0]?.id ?? '');
-  const [selectedProdiId, setSelectedProdiId] = useState<string>(PTN_DATA[0]?.prodi?.[0]?.id ?? '');
-  const [selectedMaterialConcept, setSelectedMaterialConcept] = useState<Concept | null>(null);
+  const [isBootLoading, setBootLoading] = useState(true);
+  const [appError, setAppError] = useState<string | null>(null);
+  const [selectedPtn, setSelectedPtn] = useState(PTN_DATA[0]?.id ?? '');
+  const [selectedProdi, setSelectedProdi] = useState(PTN_DATA[0]?.prodi[0]?.id ?? '');
+  const navStartRef = useRef<number>(0);
 
   const currentQuestion = useMemo(() => {
     if (!session) return null;
     return session.questions[session.currentIdx] ?? null;
   }, [session]);
 
-  const weakConcepts = useMemo(() => {
-    const entries = Object.entries(progress.materialMastery ?? {});
-    if (entries.length === 0) return ['Penalaran Induktif', 'Literasi Bahasa Indonesia', 'Penalaran Matematika'] as Concept[];
+  const selectedPtnData = useMemo(() => PTN_DATA.find((ptn) => ptn.id === selectedPtn), [selectedPtn]);
 
-    return entries
-      .sort((a, b) => a[1] - b[1])
-      .slice(0, 3)
-      .map(([concept]) => concept as Concept);
-  }, [progress.materialMastery]);
+  useEffect(() => {
+    const startedAt = performance.now();
+    const timeout = window.setTimeout(() => {
+      setBootLoading(false);
+      markMainPageRender(startedAt);
+    }, 250);
+    return () => window.clearTimeout(timeout);
+  }, []);
 
-  const remedialMaterials = useMemo(
-    () => STUDY_MATERIALS.filter((material) => weakConcepts.includes(material.concept)).slice(0, 6),
-    [weakConcepts],
-  );
+  useEffect(() => {
+    trackPageView(`/${view}`);
+  }, [view]);
 
-  const weeklyInsights = useMemo(() => {
-    const weakCategories = Object.entries(latestReport?.categoryScores ?? {})
-      .sort((a, b) => a[1] - b[1])
-      .map(([category]) => category);
 
-    const prioritized = PREDICTIONS_2026.filter((prediction) => weakCategories.includes(prediction.category));
-    return (prioritized.length > 0 ? prioritized : PREDICTIONS_2026).slice(0, 3);
-  }, [latestReport]);
+  useEffect(() => {
+    if (view === 'result') {
+      trackEvent('view_recommendation', { report_count: progress.reports?.length ?? 0 });
+    }
+  }, [view, progress.reports]);
 
-  const selectedPtn = useMemo<PTN | null>(() => PTN_DATA.find((item) => item.id === selectedPtnId) ?? null, [selectedPtnId]);
-
-  const selectedProdi = useMemo<Prodi | null>(
-    () => selectedPtn?.prodi.find((item) => item.id === selectedProdiId) ?? null,
-    [selectedPtn, selectedProdiId],
-  );
-
-  const latestScore = latestReport?.totalScore ?? progress.reports?.[0]?.totalScore ?? 0;
-  const targetGap = selectedProdi ? selectedProdi.passingGrade - latestScore : null;
-
-  const startTryout = () => {
-    startSession('tryout');
-    setScreen('Tryout');
+  const startQuickQuiz = () => {
+    try {
+      startSession('mini');
+      trackEvent('start_quiz', { mode: 'mini' });
+      setView('quiz');
+    } catch (error) {
+      setAppError('Gagal memulai kuis. Silakan coba lagi.');
+      console.error(error);
+    }
   };
 
-  const startSimulation = () => {
-    startSession('simulation');
-    setScreen('Simulation');
-  };
-
-  const startTargetedDrill = (concept?: Concept) => {
-    const focusConcept = concept ?? weakConcepts[0];
-    startSession('targeted', undefined, { concept: focusConcept });
-    setSelectedMaterialConcept(focusConcept);
-    setScreen('Tryout');
+  const finishQuiz = () => {
+    submitQuiz();
+    trackEvent('submit_quiz', {
+      answered_count: Object.keys(session?.answers ?? {}).length,
+      total_questions: session?.questions.length ?? 0,
+    });
+    setView('result');
   };
 
   const finishQuiz = useCallback(() => {
@@ -187,6 +195,13 @@ export default function App() {
     });
   }, [selectedPtn]);
 
+  useEffect(() => {
+    if (!selectedPtn) return;
+    if (!selectedPtn.prodi.some((prodi) => prodi.id === selectedProdiId)) {
+      setSelectedProdiId(selectedPtn.prodi[0]?.id ?? '');
+    }
+  }, [selectedPtn, selectedProdiId]);
+
   const activeSubTest = useMemo(() => {
     if (!session?.subTests?.length) return null;
     return session.subTests[session.currentSubTestIdx ?? 0] ?? null;
@@ -197,18 +212,159 @@ export default function App() {
     return Math.max(0, Math.ceil((activeSubTest.expiresAt - now) / 1000));
   }, [activeSubTest, now]);
 
-  const renderQuizScreen = () => (
-    <>
+  const handleQuestionMove = (action: 'prev' | 'next') => {
+    navStartRef.current = performance.now();
+    if (action === 'next') {
+      nextQuestion();
+    } else {
+      prevQuestion();
+    }
+    requestAnimationFrame(() => {
+      markQuestionNavigationLatency(performance.now() - navStartRef.current);
+    });
+  };
+
+  const applyTarget = () => {
+    if (!selectedPtn || !selectedProdi) {
+      setAppError('Silakan pilih PTN dan prodi terlebih dahulu.');
+      return;
+    }
+    setTarget({ ptnId: selectedPtn, prodiId: selectedProdi });
+  };
+
+  if (isBootLoading) {
+    return (
+      <main className="mx-auto flex min-h-screen max-w-3xl items-center px-6 py-10">
+        <StatePanel
+          kind="loading"
+          title="Menyiapkan dashboard SNBT"
+          description="Sedang memuat bank soal dan progres terakhir Anda."
+          action={<LoaderCircle className="animate-spin" aria-hidden="true" />}
+        />
+      </main>
+    );
+  }
+
+  if (appError) {
+    return (
+      <main className="mx-auto flex min-h-screen max-w-3xl items-center px-6 py-10">
+        <StatePanel
+          kind="error"
+          title="Terjadi kendala"
+          description={appError}
+          action={
+            <Button variant="secondary" onClick={() => setAppError(null)} aria-label="Coba lagi">
+              <AlertCircle size={16} /> Coba lagi
+            </Button>
+          }
+        />
+      </main>
+    );
+  }
+
+  if (view === 'home') {
+    return (
+      <main className="mx-auto flex min-h-screen max-w-3xl flex-col justify-center gap-6 px-6 py-10">
+        <h1 className="text-3xl font-bold text-slate-950">SNBT Practice Arena</h1>
+        <p className="text-slate-700">
+          Bank soal aktif: <span className="font-semibold text-slate-900">{QUESTIONS.length}</span> soal.
+        </p>
+
+        <Card className="space-y-3">
+          <h2 className="font-bold text-slate-900">Target PTN</h2>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="space-y-1 text-sm font-semibold text-slate-800">
+              <span>Pilih PTN</span>
+              <select
+                className="w-full rounded-xl border border-slate-300 p-2"
+                value={selectedPtn}
+                onChange={(e) => {
+                  const nextPtn = e.target.value;
+                  setSelectedPtn(nextPtn);
+                  setSelectedProdi(PTN_DATA.find((ptn) => ptn.id === nextPtn)?.prodi[0]?.id ?? '');
+                }}
+                aria-label="Pilih perguruan tinggi negeri"
+              >
+                {PTN_DATA.map((ptn) => (
+                  <option key={ptn.id} value={ptn.id}>
+                    {ptn.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="space-y-1 text-sm font-semibold text-slate-800">
+              <span>Pilih Prodi</span>
+              <select
+                className="w-full rounded-xl border border-slate-300 p-2"
+                value={selectedProdi}
+                onChange={(e) => setSelectedProdi(e.target.value)}
+                aria-label="Pilih program studi"
+              >
+                {(selectedPtnData?.prodi ?? []).map((prodi) => (
+                  <option key={prodi.id} value={prodi.id}>
+                    {prodi.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+          <Button variant="secondary" onClick={applyTarget} aria-label="Tetapkan target PTN">
+            Tetapkan Target
+          </Button>
+        </Card>
+
+        <Button type="button" onClick={startQuickQuiz} className="w-fit" aria-label="Mulai quiz cepat">
+          <Target size={18} /> Mulai Quiz Cepat
+        </Button>
+      </main>
+    );
+  }
+
+  if (view === 'result') {
+    return (
+      <main className="mx-auto flex min-h-screen max-w-3xl flex-col justify-center gap-4 px-6 py-10">
+        <h2 className="text-2xl font-bold text-slate-950">Quiz selesai</h2>
+        {(progress.reports?.length ?? 0) === 0 ? (
+          <StatePanel
+            kind="empty"
+            title="Belum ada riwayat"
+            description="Belum ada laporan kuis tersimpan. Mulai kuis untuk melihat rekomendasi belajar."
+          />
+        ) : (
+          <Card>
+            <p className="text-slate-700">
+              Total sesi tersimpan: <span className="font-semibold text-slate-900">{progress.reports?.length ?? 0}</span>
+            </p>
+          </Card>
+        )}
+        <Button
+          type="button"
+          variant="secondary"
+          onClick={() => {
+            setSession(null);
+            setView('home');
+          }}
+          className="w-fit"
+          aria-label="Kembali ke beranda"
+        >
+          <Home size={18} /> Kembali ke beranda
+        </Button>
+      </main>
+    );
+  }
+
+  return (
+    <main className="mx-auto flex min-h-screen max-w-3xl flex-col gap-6 px-6 py-10">
       <header className="flex items-center justify-between">
-        <h2 className="inline-flex items-center gap-2 text-xl font-bold text-slate-900">
-          <BookOpen size={20} /> {session?.mode === 'simulation' ? 'Mode Simulasi' : 'Mode Tryout / Drill'}
+        <h2 className="inline-flex items-center gap-2 text-xl font-bold text-slate-950">
+          <BookOpen size={20} /> Mode Quiz
         </h2>
         <div className="text-right">
-          <span className="block text-sm text-slate-500">
+          <span className="block text-sm text-slate-700" aria-live="polite">
             {session ? `${session.currentIdx + 1}/${session.questions.length}` : '0/0'}
           </span>
           {activeSubTest && subTestRemainingSec !== null ? (
-            <span className="block text-xs font-semibold text-amber-600">
+            <span className="block text-xs font-semibold text-amber-800">
               {activeSubTest.name}: {subTestRemainingSec}s
             </span>
           ) : null}
@@ -223,7 +379,7 @@ export default function App() {
 
       {session && currentQuestion ? (
         <>
-          <QuestionCard
+          <QuestionRenderer
             question={currentQuestion}
             answer={session.answers[currentQuestion.id]}
             onAnswer={answerQuestion}
@@ -231,36 +387,38 @@ export default function App() {
           />
 
           <div className="flex items-center justify-between gap-3">
-            <button
+            <Button
               type="button"
-              onClick={prevQuestion}
+              variant="secondary"
+              onClick={() => handleQuestionMove('prev')}
               disabled={session.currentIdx === 0}
-              className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-4 py-2 text-slate-700 disabled:opacity-50"
+              aria-label="Pindah ke soal sebelumnya"
             >
               <ChevronLeft size={16} /> Sebelumnya
-            </button>
+            </Button>
 
             {session.currentIdx === session.questions.length - 1 ? (
-              <button
-                type="button"
-                onClick={finishQuiz}
-                className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 font-semibold text-white hover:bg-emerald-700"
-              >
+              <Button type="button" variant="success" onClick={finishQuiz} aria-label="Submit kuis">
                 <CheckCircle2 size={16} /> Submit
-              </button>
+              </Button>
             ) : (
-              <button
-                type="button"
-                onClick={nextQuestion}
-                className="inline-flex items-center gap-1 rounded-lg bg-indigo-600 px-4 py-2 font-semibold text-white hover:bg-indigo-700"
-              >
+              <Button type="button" onClick={() => handleQuestionMove('next')} aria-label="Pindah ke soal berikutnya">
                 Berikutnya <ChevronRight size={16} />
-              </button>
+              </Button>
             )}
           </div>
         </>
       ) : (
-        <p className="text-slate-600">Tidak ada sesi aktif.</p>
+        <StatePanel
+          kind="empty"
+          title="Tidak ada sesi aktif"
+          description="Sesi kuis belum tersedia. Kembali ke beranda untuk memulai sesi baru."
+          action={
+            <Button variant="secondary" onClick={() => setView('home')}>
+              <Home size={16} /> Ke Beranda
+            </Button>
+          }
+        />
       )}
     </>
   );
