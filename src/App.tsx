@@ -101,7 +101,7 @@ export default function App() {
     setTarget,
   } = useQuiz();
 
-  const [view, setView] = useState<'home' | 'quiz' | 'result'>('home');
+  const [view, setView] = useState<AppView>('home');
   const [now, setNow] = useState(() => Date.now());
   const [isBootLoading, setBootLoading] = useState(true);
   const [appError, setAppError] = useState<string | null>(null);
@@ -177,6 +177,13 @@ export default function App() {
     submitQuiz();
     setView('result');
   }, [session?.isSubmitted, submitQuiz, view]);
+
+  useEffect(() => {
+    if (!selectedPtn) return;
+    if (!selectedPtn.prodi.some((prodi) => prodi.id === selectedProdiId)) {
+      setSelectedProdiId(selectedPtn.prodi[0]?.id ?? '');
+    }
+  }, [selectedPtn, selectedProdiId]);
 
   const activeSubTest = useMemo(() => {
     if (!session?.subTests?.length) return null;
@@ -349,7 +356,7 @@ export default function App() {
 
       {session && currentQuestion ? (
         <>
-          <QuestionCard
+          <QuestionRenderer
             question={currentQuestion}
             answer={session.answers[currentQuestion.id]}
             onAnswer={answerQuestion}
