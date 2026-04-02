@@ -411,6 +411,11 @@ export default function App() {
   const currentQuestion = session?.questions[session.currentIdx];
   const isLastQuestion = session && session.currentIdx === session.questions.length - 1;
   const currentSubTest = session?.subTests && session.currentSubTestIdx !== undefined ? session.subTests[session.currentSubTestIdx] : null;
+  const latestReport = progress.reports[0];
+  const avgReadinessScore = progress.reports.length > 0
+    ? Math.round(progress.reports.reduce((acc, r) => acc + (r.readinessScore ?? r.totalScore), 0) / progress.reports.length)
+    : 0;
+  const latestReadiness = latestReport?.readinessBySubTest ?? [];
   const totalConcepts = new Set(STUDY_MATERIALS.map((material) => material.concept)).size;
   const masteredConcepts = Object.keys(progress.materialMastery).length;
   const masteryPercentage = totalConcepts > 0 ? Math.round((masteredConcepts / totalConcepts) * 100) : 0;
@@ -669,6 +674,8 @@ export default function App() {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
         {[
           { label: 'Soal Terjawab', value: progress.completedIds.length, icon: CheckCircle2, color: 'text-emerald-500', bg: 'bg-emerald-50' },
+          { label: 'Rata-rata Readiness', value: avgReadinessScore, icon: Trophy, color: 'text-amber-500', bg: 'bg-amber-50' },
+          { label: 'Materi Dikuasai', value: `${Math.round((Object.keys(progress.materialMastery).length / 20) * 100)}%`, icon: GraduationCap, color: 'text-indigo-500', bg: 'bg-indigo-50' },
           { label: 'Rata-rata Skor', value: progress.reports.length > 0 ? Math.round(progress.reports.reduce((acc, r) => acc + r.totalScore, 0) / progress.reports.length) : 0, icon: Trophy, color: 'text-amber-500', bg: 'bg-amber-50' },
           { label: 'Materi Dikuasai', value: `${masteryPercentage}%`, tooltip: `${masteredConcepts} dari ${totalConcepts} konsep`, icon: GraduationCap, color: 'text-indigo-500', bg: 'bg-indigo-50' },
           { label: 'Peringkat Nasional', value: progress.reports.length > 0 ? `#${progress.reports[0].nationalRank}` : '-', icon: Award, color: 'text-violet-500', bg: 'bg-violet-50' },
@@ -686,6 +693,31 @@ export default function App() {
         ))}
       </div>
 
+      {latestReadiness.length > 0 && (
+        <section className="space-y-5">
+          <h2 className="text-2xl font-black text-slate-900 flex items-center gap-3">
+            <div className="bg-rose-600 w-2 h-8 rounded-full" />
+            Readiness per Subtes (5-10 sesi)
+          </h2>
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-5">
+            {latestReadiness.map((item) => (
+              <div key={item.subTest} className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-4">
+                <div className="flex items-start justify-between gap-3">
+                  <h3 className="font-black text-slate-900 text-sm">{item.subTest}</h3>
+                  <span className={cn(
+                    "px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest",
+                    item.readiness === 'Aman' ? 'bg-emerald-100 text-emerald-700' : item.readiness === 'Waspada' ? 'bg-amber-100 text-amber-700' : 'bg-rose-100 text-rose-700'
+                  )}>
+                    {item.readiness}
+                  </span>
+                </div>
+                <div className="text-sm text-slate-500 font-semibold">
+                  Readiness: <span className="text-slate-900 font-black">{Math.round(item.score)}</span> • Trend {item.trend >= 0 ? '+' : ''}{Math.round(item.trend)} • Stabilitas {item.stability}%
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
       <section className="grid lg:grid-cols-2 gap-6">
         <div className="bg-white p-7 rounded-3xl border border-slate-200 shadow-sm space-y-4">
           <div className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-indigo-600">
@@ -1320,6 +1352,8 @@ export default function App() {
               <div className="relative group">
                 <div className="absolute inset-0 bg-indigo-500 blur-[40px] opacity-20 group-hover:opacity-40 transition-opacity" />
                 <div className="w-64 h-64 rounded-full border-[16px] border-white/5 flex flex-col items-center justify-center relative bg-slate-900/50 backdrop-blur-xl">
+                  <span className="text-[11px] font-black text-slate-400 uppercase tracking-[0.4em] mb-2">Readiness Score</span>
+                  <span className="text-7xl font-black text-white tracking-tighter">{Math.round(selectedReport.readinessScore ?? selectedReport.totalScore)}</span>
                   <span className="text-[11px] font-black text-slate-400 uppercase tracking-[0.4em] mb-2">IRT Score</span>
                   <span className="text-7xl font-black text-white tracking-tighter">{Math.round(safeReport.totalScore)}</span>
                   <div className="h-px w-24 bg-white/10 my-3" />
@@ -1351,6 +1385,9 @@ export default function App() {
                   </div>
                   <p className={cn(
                     "text-4xl font-black",
+                    (selectedReport.readinessScore ?? selectedReport.totalScore) > 650 ? "text-emerald-400" : (selectedReport.readinessScore ?? selectedReport.totalScore) > 550 ? "text-amber-400" : "text-rose-400"
+                  )}>
+                    {(selectedReport.readinessScore ?? selectedReport.totalScore) > 650 ? 'Sangat Tinggi' : (selectedReport.readinessScore ?? selectedReport.totalScore) > 550 ? 'Tinggi' : 'Menengah'}
                     safeReport.totalScore > 650 ? "text-emerald-400" : safeReport.totalScore > 550 ? "text-amber-400" : "text-rose-400"
                   )}>
                     {safeReport.totalScore > 650 ? 'Sangat Tinggi' : safeReport.totalScore > 550 ? 'Tinggi' : 'Menengah'}
@@ -1361,6 +1398,20 @@ export default function App() {
             </div>
           </div>
 
+          {selectedReport.readinessBySubTest && selectedReport.readinessBySubTest.length > 0 && (
+            <div className="bg-white rounded-[56px] p-10 border border-slate-200 shadow-sm space-y-6">
+              <h3 className="text-2xl font-black text-slate-900">Indikator Readiness per Subtes</h3>
+              <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {selectedReport.readinessBySubTest.map((item) => (
+                  <div key={item.subTest} className="p-5 rounded-3xl border border-slate-200 bg-slate-50 space-y-2">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-sm font-black text-slate-900">{item.subTest}</p>
+                      <span className={cn(
+                        "px-2 py-1 rounded-full text-[10px] font-black uppercase",
+                        item.readiness === 'Aman' ? 'bg-emerald-100 text-emerald-700' : item.readiness === 'Waspada' ? 'bg-amber-100 text-amber-700' : 'bg-rose-100 text-rose-700'
+                      )}>{item.readiness}</span>
+                    </div>
+                    <p className="text-xs text-slate-500 font-bold">Skor: {Math.round(item.score)} • Trend: {item.trend >= 0 ? '+' : ''}{Math.round(item.trend)} • Stabilitas: {item.stability}%</p>
 
           <div className="grid md:grid-cols-3 gap-6">
             <div className="bg-white rounded-3xl border border-slate-200 p-6 shadow-sm">
@@ -1642,6 +1693,23 @@ export default function App() {
                   </div>
                 ))}
               </div>
+              <div className="bg-indigo-600 rounded-[40px] p-8 text-white shadow-xl shadow-indigo-100 relative overflow-hidden">
+                <div className="absolute top-0 right-0 p-4 opacity-10">
+                  <Zap size={100} />
+                </div>
+                <p className="text-[10px] font-black uppercase tracking-[0.3em] opacity-70 mb-4">Expert Advice</p>
+                <p className="text-lg font-medium leading-relaxed italic">
+                  {(() => {
+                    const critical = (selectedReport.readinessBySubTest ?? []).filter(item => item.readiness === 'Kritis');
+                    const warning = (selectedReport.readinessBySubTest ?? []).filter(item => item.readiness === 'Waspada');
+                    const focus = critical.length > 0 ? critical : warning;
+                    if (focus.length === 0) {
+                      return '"Semua subtes sudah Aman. Pertahankan ritme latihan campuran agar readiness tetap stabil."';
+                    }
+                    const topFocus = focus.slice(0, 2).map(item => item.subTest).join(' dan ');
+                    return `"Prioritas belajar otomatis: ${topFocus}. Fokus 2 sesi berturut-turut untuk mengangkat subtes paling kritis terlebih dahulu."`;
+                  })()}
+                </p>
           <div className="bg-white rounded-[56px] p-10 border border-slate-200 shadow-sm space-y-8">
             <div className="flex items-center gap-4">
               <div className="bg-amber-50 p-3 rounded-2xl">
@@ -1804,7 +1872,7 @@ export default function App() {
               </h3>
               <div className="space-y-4">
                 {[
-                  { label: 'Total Skor IRT', value: progress.reports.length > 0 ? Math.round(progress.reports[0].totalScore) : 0, sub: 'Skor Tertinggi' },
+                  { label: 'Readiness Terkini', value: progress.reports.length > 0 ? Math.round(progress.reports[0].readinessScore ?? progress.reports[0].totalScore) : 0, sub: 'Trend-aware score' },
                   { label: 'Soal Terjawab', value: progress.completedIds.length, sub: 'Dari 1000+ Soal' },
                   { label: 'Akurasi Global', value: `${data.length > 0 ? Math.round(data.reduce((acc, d) => acc + d.accuracy, 0) / data.length) : 0}%`, sub: 'Rata-rata' },
                 ].map((item, idx) => (
@@ -1830,7 +1898,7 @@ export default function App() {
                       <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">
                         {new Date(report.date).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })}
                       </p>
-                      <p className="font-black text-slate-900">Score: {Math.round(report.totalScore)}</p>
+                      <p className="font-black text-slate-900">Readiness: {Math.round(report.readinessScore ?? report.totalScore)}</p>
                     </div>
                     <ChevronRight size={20} className="text-slate-300 group-hover:text-indigo-400 transition-colors" />
                   </button>

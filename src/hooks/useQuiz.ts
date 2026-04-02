@@ -51,6 +51,32 @@ const INITIAL_PROGRESS: UserProgress = {
   currentDifficulty: 'easy',
   reports: [],
   materialMastery: {},
+  subTestHistory: {},
+};
+
+const READINESS_WINDOW = 10;
+
+const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
+
+const calculateTrend = (scores: number[]): number => {
+  if (scores.length < 2) return 0;
+  const first = scores[0];
+  const last = scores[scores.length - 1];
+  return last - first;
+};
+
+const calculateStability = (scores: number[]): number => {
+  if (scores.length < 2) return 100;
+  const mean = scores.reduce((acc, s) => acc + s, 0) / scores.length;
+  const variance = scores.reduce((acc, s) => acc + Math.pow(s - mean, 2), 0) / scores.length;
+  const stdDev = Math.sqrt(variance);
+  return clamp(Math.round(100 - stdDev / 5), 0, 100);
+};
+
+const getReadinessLevel = (readinessScore: number): 'Aman' | 'Waspada' | 'Kritis' => {
+  if (readinessScore >= 650) return 'Aman';
+  if (readinessScore >= 500) return 'Waspada';
+  return 'Kritis';
   questionUsage: {},
   subTestHistory: [],
   conceptLastSeen: {},
@@ -500,6 +526,7 @@ export function useQuiz() {
         ...INITIAL_PROGRESS,
         ...parsed,
         materialMastery: parsed.materialMastery ?? {},
+        subTestHistory: parsed.subTestHistory ?? {},
         subTestHistory: parsed.subTestHistory ?? [],
         itemPerformance: parsed.itemPerformance ?? {},
         questionHistory: parsed.questionHistory ?? {},
@@ -1166,6 +1193,7 @@ export function useQuiz() {
       .sort((a, b) => a.status.localeCompare(b.status) || a.rollingAccuracy - b.rollingAccuracy);
 
     // Rationalization Logic
+    const baseRecommendations = PTN_DATA.flatMap(ptn => 
     const recommendations = PTN_DATA.flatMap(ptn => 
     const prioritizedWeakConcepts = Object.entries(materialMastery)
       .map(([concept, score]) => ({ concept: concept as Concept, score: score as number }))
@@ -1194,7 +1222,72 @@ export function useQuiz() {
         };
         return { ptn: ptn.name, prodi: prodi.name, chance };
       })
-    ).sort((a, b) => b.chance - a.chance).slice(0, 5);
+    );
+
+    const sessionId = `session-${Date.now()}`;
+    const subTestScores = session.subTests?.map(subTest => {
+      const subResults = subTest.questionIndices
+        .map(index => results[index])
+        .filter(Boolean);
+
+      const score = subResults.length > 0
+        ? calculateIRTScore(subResults.map(r => ({
+            correct: r.correct,
+            irtParams: r.irtParams
+          })))
+        : 0;
+
+      return { subTest: subTest.name, score };
+    }) ?? [];
+
+    const updatedSubTestHistory = { ...(progress.subTestHistory ?? {}) };
+    subTestScores.forEach(({ subTest, score }) => {
+      const history = updatedSubTestHistory[subTest] ?? [];
+      updatedSubTestHistory[subTest] = [
+        ...history,
+        { date: new Date().toISOString(), score, sessionId },
+      ].slice(-READINESS_WINDOW);
+    });
+
+    const readinessBySubTest = subTestScores.map(({ subTest, score }) => {
+      const historyScores = (updatedSubTestHistory[subTest] ?? []).map(entry => entry.score).slice(-READINESS_WINDOW);
+      const trend = calculateTrend(historyScores);
+      const stability = calculateStability(historyScores);
+      const readinessScore = clamp(Math.round(score + trend * 0.35 + (stability - 50) * 2), 0, 1000);
+
+      return {
+        subTest,
+        score,
+        trend,
+        stability,
+        readiness: getReadinessLevel(readinessScore),
+        sampleSize: historyScores.length,
+      };
+    }).sort((a, b) => {
+      const severity = { Kritis: 0, Waspada: 1, Aman: 2 };
+      if (severity[a.readiness] !== severity[b.readiness]) {
+        return severity[a.readiness] - severity[b.readiness];
+      }
+      return a.score - b.score;
+    });
+
+    const readinessScore = readinessBySubTest.length > 0
+      ? Math.round(readinessBySubTest.reduce((acc, item) => acc + (item.score + item.trend * 0.35 + (item.stability - 50) * 2), 0) / readinessBySubTest.length)
+      : irtScore;
+
+    const prioritizedKeywords = readinessBySubTest
+      .filter(item => item.readiness !== 'Aman')
+      .slice(0, 2)
+      .map(item => item.subTest.toLowerCase());
+
+    const recommendations = baseRecommendations
+      .map(rec => {
+        const combined = `${rec.prodi} ${rec.ptn}`.toLowerCase();
+        const bonus = prioritizedKeywords.some(keyword => combined.includes(keyword.split(' ')[0])) ? 8 : 0;
+        return { ...rec, chance: clamp(rec.chance + bonus, 0, 99) };
+      })
+      .sort((a, b) => b.chance - a.chance)
+      .slice(0, 5);
 
     const report: AssessmentReport = {
       id: `report-${Date.now()}`,
@@ -1203,6 +1296,8 @@ export function useQuiz() {
       questionCount: session.questions.length,
       correctCount,
       categoryScores: categoryScores as any,
+      readinessScore,
+      readinessBySubTest,
       nationalRank: rank,
       totalParticipants,
       percentile,
@@ -1687,6 +1782,7 @@ export function useQuiz() {
         materialMastery: aggregateMastery,
         reports: [mergedReport, ...prev.reports].slice(0, 10),
         materialMastery: { ...(prev.materialMastery ?? {}), ...materialMastery },
+        subTestHistory: updatedSubTestHistory,
         subTestHistory: [
           {
             date: finalReport.date,

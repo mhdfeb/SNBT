@@ -201,6 +201,7 @@ export interface UserProgress {
   reports: AssessmentReport[];
   materialMastery: { [concept: string]: { correct: number; total: number } };
   materialMastery: { [concept: string]: number }; // 0-100 per concept
+  subTestHistory: { [subTestName: string]: SubTestHistoryEntry[] };
   questionUsage: { [questionId: string]: { shownCount: number; lastShownAt: string | null } };
   questionPerformance: { [questionId: string]: { attempts: number; wrong: number } };
   target?: UserTarget;
@@ -291,6 +292,14 @@ export interface SimulationAnalysis {
   };
 }
 
+export interface SubTestHistoryEntry {
+  date: string;
+  score: number; // IRT score (0-1000)
+  sessionId: string;
+}
+
+export type ReadinessLevel = 'Aman' | 'Waspada' | 'Kritis';
+
 export interface AssessmentReport {
   id: string;
   date: string;
@@ -298,6 +307,15 @@ export interface AssessmentReport {
   questionCount?: number;
   correctCount?: number;
   categoryScores: { [key in Category]: number };
+  readinessScore: number; // trend-aware readiness (0-1000)
+  readinessBySubTest: {
+    subTest: string;
+    score: number;
+    trend: number;
+    stability: number;
+    readiness: ReadinessLevel;
+    sampleSize: number;
+  }[];
   nationalRank: number;
   totalParticipants: number;
   percentile: number;
