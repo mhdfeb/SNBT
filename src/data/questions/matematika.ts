@@ -1,6 +1,7 @@
 import { Question } from '../../types/quiz';
+import { withBlueprintMetadata } from './quality';
 
-export const MATEMATIKA_QUESTIONS: Question[] = [
+export const MATEMATIKA_QUESTIONS: Question[] = withBlueprintMetadata([
   // --- Penalaran Matematika ---
   {
     id: 'pm-1',
@@ -84,4 +85,4 @@ export const MATEMATIKA_QUESTIONS: Question[] = [
     explanation: 'Angka genap: 2, 4, 6 (ada 3). Total sisi: 6. Peluang = 3/6 = 1/2.',
     irtParams: { difficulty: 1.3, discrimination: 1.5, guessing: 0.2 }
   }
-];
+]);
