@@ -10,6 +10,8 @@ const INITIAL_PROGRESS: UserProgress = {
   completedIds: [],
   wrongIds: [],
   streak: 0,
+  qualityStreak: 0,
+  qualityDays: {},
   dailyProgress: {},
   categoryStats: {
     'TPS': { correct: 0, total: 0 },
@@ -20,6 +22,7 @@ const INITIAL_PROGRESS: UserProgress = {
   currentDifficulty: 'easy',
   reports: [],
   materialMastery: {},
+  conceptLastSeen: {},
 };
 
 const SUB_TEST_CONFIGS = [
@@ -39,7 +42,13 @@ export function useQuiz() {
     const saved = localStorage.getItem(STORAGE_KEY);
     if (saved) {
       const parsed = JSON.parse(saved);
-      return { ...INITIAL_PROGRESS, ...parsed, materialMastery: parsed.materialMastery ?? {} };
+      return { 
+        ...INITIAL_PROGRESS, 
+        ...parsed, 
+        materialMastery: parsed.materialMastery ?? {},
+        qualityDays: parsed.qualityDays ?? {},
+        conceptLastSeen: parsed.conceptLastSeen ?? {},
+      };
     }
     return INITIAL_PROGRESS;
   });
@@ -336,6 +345,8 @@ export function useQuiz() {
       id: `report-${Date.now()}`,
       date: new Date().toISOString(),
       totalScore: irtScore,
+      questionCount: session.questions.length,
+      correctCount,
       categoryScores: categoryScores as any,
       nationalRank: rank,
       totalParticipants,
@@ -363,6 +374,21 @@ export function useQuiz() {
 
       let newDifficulty = prev.currentDifficulty;
       const accuracy = correctCount / (session.questions.length || 1);
+      const isMeaningfulSession = session.questions.length >= 5 && accuracy >= 0.6;
+      const updatedQualityDays = { ...prev.qualityDays };
+      if (isMeaningfulSession) updatedQualityDays[today] = true;
+
+      const countedDays = Object.keys(updatedQualityDays).sort();
+      let qualityStreak = 0;
+      if (countedDays.length > 0 && countedDays[countedDays.length - 1] === today) {
+        let cursor = new Date(`${today}T00:00:00.000Z`);
+        while (true) {
+          const key = cursor.toISOString().split('T')[0];
+          if (!updatedQualityDays[key]) break;
+          qualityStreak += 1;
+          cursor.setUTCDate(cursor.getUTCDate() - 1);
+        }
+      }
       if (accuracy > 0.8) {
         if (newDifficulty === 'easy') newDifficulty = 'medium';
         else if (newDifficulty === 'medium') newDifficulty = 'trap';
@@ -376,6 +402,8 @@ export function useQuiz() {
         completedIds: newCompletedIds,
         wrongIds: newWrongIds,
         streak: correctCount === session.questions.length ? prev.streak + 1 : 0,
+        qualityStreak,
+        qualityDays: updatedQualityDays,
         dailyProgress: {
           ...prev.dailyProgress,
           [today]: (prev.dailyProgress[today] || 0) + correctCount,
@@ -383,6 +411,10 @@ export function useQuiz() {
         categoryStats: updatedStats,
         currentDifficulty: newDifficulty,
         materialMastery: { ...(prev.materialMastery ?? {}), ...materialMastery },
+        conceptLastSeen: {
+          ...(prev.conceptLastSeen ?? {}),
+          ...Object.fromEntries(results.map(r => [r.concept, new Date().toISOString()])),
+        },
         reports: [report, ...prev.reports].slice(0, 10),
       };
     });

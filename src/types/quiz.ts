@@ -47,17 +47,22 @@ export interface UserProgress {
   completedIds: string[];
   wrongIds: string[];
   streak: number;
+  qualityStreak: number;
+  qualityDays: { [date: string]: boolean };
   dailyProgress: { [date: string]: number };
   categoryStats: { [key in Category]: { correct: number; total: number } };
   currentDifficulty: Difficulty;
   reports: AssessmentReport[];
   materialMastery: { [concept: string]: number }; // 0-100 per concept
+  conceptLastSeen: { [concept: string]: string }; // ISO datetime
 }
 
 export interface AssessmentReport {
   id: string;
   date: string;
   totalScore: number; // IRT Score (0-1000)
+  questionCount?: number;
+  correctCount?: number;
   categoryScores: { [key in Category]: number };
   nationalRank: number;
   totalParticipants: number;

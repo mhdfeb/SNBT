@@ -317,6 +317,47 @@ export default function App() {
   const currentQuestion = session?.questions[session.currentIdx];
   const isLastQuestion = session && session.currentIdx === session.questions.length - 1;
   const currentSubTest = session?.subTests && session.currentSubTestIdx !== undefined ? session.subTests[session.currentSubTestIdx] : null;
+  const now = new Date();
+  const recentReports = progress.reports.filter(report => {
+    const ageDays = (now.getTime() - new Date(report.date).getTime()) / (1000 * 60 * 60 * 24);
+    return ageDays <= 7;
+  });
+  const weakConcepts = Object.entries(progress.materialMastery)
+    .sort((a, b) => a[1] - b[1])
+    .slice(0, 3);
+  const criticalConcept = weakConcepts[0]?.[0];
+  const weeklyMissionTarget = criticalConcept ? Math.min(6, 3 + Math.ceil((70 - (weakConcepts[0]?.[1] || 0)) / 15)) : 3;
+  const weeklyMissionProgress = recentReports.reduce((acc, report) => {
+    if (!criticalConcept) return acc;
+    return acc + ((report.materialMastery as any)[criticalConcept] !== undefined ? 1 : 0);
+  }, 0);
+  const masteryNow = Object.values(progress.materialMastery).length > 0
+    ? Object.values(progress.materialMastery).reduce((a, b) => a + b, 0) / Object.values(progress.materialMastery).length
+    : 0;
+  const masteryWeekAgo = progress.reports.length > 0
+    ? (() => {
+        const older = progress.reports.filter(r => (now.getTime() - new Date(r.date).getTime()) / (1000 * 60 * 60 * 24) > 7);
+        if (!older[0]) return masteryNow;
+        const vals = Object.values(older[0].materialMastery);
+        return vals.length > 0 ? vals.reduce((a, b) => a + b, 0) / vals.length : masteryNow;
+      })()
+    : 0;
+  const weakAreaNow = Object.values(progress.materialMastery).filter(v => v < 60).length;
+  const weakAreaWeekAgo = progress.reports[0]
+    ? Object.values(progress.reports[progress.reports.length - 1]?.materialMastery ?? {}).filter(v => v < 60).length
+    : weakAreaNow;
+  const contextReminder = weakConcepts
+    .map(([concept, score]) => {
+      const lastSeen = progress.conceptLastSeen?.[concept];
+      const days = lastSeen ? Math.floor((now.getTime() - new Date(lastSeen).getTime()) / (1000 * 60 * 60 * 24)) : 999;
+      return { concept, score, days };
+    })
+    .sort((a, b) => (b.days - a.days) || (a.score - b.score))[0];
+  const ctaVariants = [
+    "Lanjutkan 1 sesi fokus 12 menit → perkuat konsep terlemahmu sekarang.",
+    "Jaga streak berkualitas hari ini: selesaikan 5 soal bermakna.",
+  ];
+  const ctaCopy = ctaVariants[now.getUTCDate() % ctaVariants.length];
 
   // --- Views ---
 
@@ -373,14 +414,14 @@ export default function App() {
             <div className="space-y-2">
               <h3 className="text-3xl font-black text-slate-900">Belajar Rutin</h3>
               <p className="text-slate-500 font-medium leading-relaxed">
-                Pertahankan streak belajarmu untuk mendapatkan poin tambahan.
+                Streak berkualitas dihitung saat kamu menyelesaikan minimal 5 soal dengan akurasi ≥60%.
               </p>
             </div>
           </div>
           <div className="pt-8 border-t border-slate-100 flex items-center justify-between relative z-10">
             <div>
-              <p className="text-[10px] text-slate-400 uppercase font-black tracking-[0.2em]">Streak Saat Ini</p>
-              <p className="text-4xl font-black text-slate-900 mt-1">{progress.streak} Hari</p>
+              <p className="text-[10px] text-slate-400 uppercase font-black tracking-[0.2em]">Streak Berkualitas</p>
+              <p className="text-4xl font-black text-slate-900 mt-1">{progress.qualityStreak} Hari</p>
             </div>
             <div className="bg-indigo-50 p-4 rounded-2xl border border-indigo-100">
               <TrendingUp className="text-indigo-600" size={28} />
@@ -408,6 +449,68 @@ export default function App() {
           </div>
         ))}
       </div>
+
+      <section className="grid lg:grid-cols-2 gap-6">
+        <div className="bg-white p-7 rounded-3xl border border-slate-200 shadow-sm space-y-4">
+          <div className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-indigo-600">
+            <Target size={16} /> Weekly Mission Adaptif
+          </div>
+          <h3 className="text-xl font-black text-slate-900">
+            {criticalConcept ? `Naikkan ${criticalConcept} ke atas 70%` : 'Selesaikan latihan harian'}
+          </h3>
+          <p className="text-sm text-slate-500">
+            Misi mingguan otomatis menyesuaikan konsep terlemahmu agar peningkatan terasa terarah.
+          </p>
+          <ProgressBar current={weeklyMissionProgress} total={weeklyMissionTarget} />
+          <p className="text-xs font-semibold text-slate-600">
+            Progress {weeklyMissionProgress}/{weeklyMissionTarget} sesi minggu ini.
+          </p>
+        </div>
+        <div className="bg-slate-900 p-7 rounded-3xl border border-slate-800 shadow-sm space-y-4 text-white">
+          <div className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-amber-300">
+            <AlertTriangle size={16} /> Reminder Kontekstual
+          </div>
+          <h3 className="text-xl font-black">
+            {contextReminder
+              ? `${contextReminder.concept} mulai terlupakan`
+              : 'Belum ada konsep prioritas'}
+          </h3>
+          <p className="text-sm text-slate-300">
+            {contextReminder
+              ? `Mastery ${contextReminder.score}%, terakhir dilatih ${contextReminder.days} hari lalu. Prioritaskan konsep ini di sesi berikutnya.`
+              : 'Kerja bagus! Pertahankan ritme latihan agar tidak ada konsep yang menurun.'}
+          </p>
+          <button
+            onClick={() => handleStart('daily')}
+            className="w-full bg-white text-slate-900 px-5 py-3 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-slate-100 transition-colors"
+          >
+            {ctaCopy}
+          </button>
+        </div>
+      </section>
+
+      <section className="bg-white p-7 rounded-3xl border border-slate-200 shadow-sm space-y-5">
+        <div className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-emerald-600">
+          <Calendar size={16} /> Progress Mingguan Ringkas
+        </div>
+        <div className="grid md:grid-cols-3 gap-4">
+          <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200">
+            <p className="text-[10px] uppercase tracking-widest font-black text-slate-400">Effort</p>
+            <p className="text-2xl font-black text-slate-900">{recentReports.reduce((acc, r) => acc + (r.questionCount || 0), 0)} soal</p>
+            <p className="text-xs text-slate-500">dalam 7 hari terakhir.</p>
+          </div>
+          <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200">
+            <p className="text-[10px] uppercase tracking-widest font-black text-slate-400">Mastery Gain</p>
+            <p className="text-2xl font-black text-slate-900">{masteryNow >= masteryWeekAgo ? '+' : ''}{Math.round(masteryNow - masteryWeekAgo)} pts</p>
+            <p className="text-xs text-slate-500">rata-rata penguasaan konsep.</p>
+          </div>
+          <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200">
+            <p className="text-[10px] uppercase tracking-widest font-black text-slate-400">Weak-area Reduction</p>
+            <p className="text-2xl font-black text-slate-900">{Math.max(0, weakAreaWeekAgo - weakAreaNow)} konsep</p>
+            <p className="text-xs text-slate-500">keluar dari zona lemah (&lt;60%).</p>
+          </div>
+        </div>
+      </section>
 
       {/* Main Features */}
       <section className="space-y-6">
