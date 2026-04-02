@@ -2,7 +2,7 @@ export * from './question';
 export * from './progress';
 export * from './report';
 
-import type { Category, Concept, Question } from './question';
+import type { Category, Concept, Question, QuestionAnswer } from './question';
 import type { QuizStrategy, SessionRecommendation } from './report';
 
 export interface QuizSession {
@@ -20,7 +20,7 @@ export interface QuizSession {
   };
   strategy?: QuizStrategy;
   currentIdx: number;
-  answers: { [questionId: string]: unknown };
+  answers: { [questionId: string]: QuestionAnswer };
   marked: { [questionId: string]: boolean };
   answerTimeline?: { [questionId: string]: number[] };
   startTime: number;

@@ -1,6 +1,7 @@
-import { withBlueprintMetadata, type QuestionSeed } from './quality';
+import { withBlueprintMetadata } from './quality';
+import type { Question } from '../../types/quiz';
 
-export const SNBT2025_QUESTIONS: QuestionSeed[] = withBlueprintMetadata([
+export const SNBT2025_QUESTIONS: Question[] = withBlueprintMetadata([
   {
     id: 'snbt25-1',
     category: 'TPS',
