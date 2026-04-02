@@ -294,6 +294,15 @@ export default function App() {
   const [showSubTestConfirm, setShowSubTestConfirm] = useState(false);
   const [showSubmitConfirm, setShowSubmitConfirm] = useState(false);
 
+  const findMaterialFromRemedial = (concept: string, materialId?: string) => {
+    if (materialId) {
+      const byId = STUDY_MATERIALS.find(material => material.id === materialId);
+      if (byId) return byId;
+    }
+    const normalizedConcept = concept.toLowerCase().trim();
+    return STUDY_MATERIALS.find(material => material.concept.toLowerCase().trim() === normalizedConcept);
+  };
+
   const getModeName = (mode: string) => {
     switch(mode) {
       case 'mini': return 'Mini Tryout';
@@ -410,6 +419,47 @@ export default function App() {
       </div>
 
       {/* Main Features */}
+      {progress.lastRemedialConcepts && progress.lastRemedialConcepts.length > 0 && (
+        <section className="space-y-5">
+          <h2 className="text-2xl font-black text-slate-900 flex items-center gap-3">
+            <div className="bg-amber-500 w-2 h-8 rounded-full" />
+            Prioritas Belajar Hari Ini
+          </h2>
+          <div className="grid md:grid-cols-3 gap-5">
+            {progress.lastRemedialConcepts.slice(0, 3).map((item, idx) => {
+              const material = findMaterialFromRemedial(item.concept, item.materialId);
+              return (
+                <div key={`${item.concept}-${idx}`} className="bg-white p-6 rounded-3xl border border-amber-100 shadow-sm space-y-4">
+                  <div>
+                    <p className="text-[10px] text-amber-600 uppercase tracking-widest font-black">Akurasi Sesi Terakhir</p>
+                    <p className="text-2xl font-black text-slate-900">{item.accuracy}%</p>
+                    <p className="text-sm text-slate-500 font-semibold">{item.concept}</p>
+                  </div>
+                  {material ? (
+                    <button
+                      onClick={() => {
+                        setSelectedMaterial(material);
+                        setView('study');
+                      }}
+                      className="w-full bg-amber-500 text-white py-3 rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-amber-400 transition-colors"
+                    >
+                      Pelajari konsep ini sekarang
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => setView('study')}
+                      className="w-full bg-slate-900 text-white py-3 rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-slate-800 transition-colors"
+                    >
+                      Buka Pustaka Materi
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      )}
+
       <section className="space-y-6">
         <div className="flex items-center justify-between">
           <h2 className="text-2xl font-black text-slate-900 flex items-center gap-3">
@@ -913,6 +963,45 @@ export default function App() {
                 </p>
               </div>
             </div>
+          </div>
+
+          <div className="bg-white rounded-[56px] p-10 border border-slate-200 shadow-sm space-y-8">
+            <div className="flex items-center gap-4">
+              <div className="bg-amber-50 p-3 rounded-2xl">
+                <AlertTriangle size={24} className="text-amber-600" />
+              </div>
+              <div>
+                <h3 className="text-2xl font-black text-slate-900">Rekomendasi Remedial</h3>
+                <p className="text-sm text-slate-500 font-medium">Konsep dengan akurasi terendah dari sesi ini.</p>
+              </div>
+            </div>
+
+            <div className="grid md:grid-cols-3 gap-6">
+              {(selectedReport.remedialConcepts ?? []).slice(0, 3).map((item, idx) => {
+                const material = findMaterialFromRemedial(item.concept, item.materialId);
+                return (
+                  <div key={`${item.concept}-${idx}`} className="p-6 rounded-[32px] border border-amber-100 bg-amber-50/40 space-y-5">
+                    <div>
+                      <p className="text-[10px] font-black uppercase tracking-widest text-amber-600">Akurasi</p>
+                      <p className="text-3xl font-black text-slate-900">{item.accuracy}%</p>
+                      <p className="text-sm font-semibold text-slate-600 mt-1">{item.concept}</p>
+                    </div>
+                    <button
+                      onClick={() => {
+                        if (material) setSelectedMaterial(material);
+                        setView('study');
+                      }}
+                      className="w-full bg-indigo-600 text-white py-3.5 rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-indigo-500 transition-colors"
+                    >
+                      Pelajari konsep ini sekarang
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+            {(selectedReport.remedialConcepts ?? []).length === 0 && (
+              <p className="text-slate-500 font-medium">Belum ada data remedial untuk laporan ini.</p>
+            )}
           </div>
         </div>
       </div>

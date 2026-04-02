@@ -3,6 +3,7 @@ import { Question, UserProgress, QuizSession, Difficulty, Category, AssessmentRe
 import { QUESTIONS } from '../data/questions';
 import { calculateIRTScore, getNationalStats } from '../lib/irt';
 import { PTN_DATA } from '../data/ptn';
+import { STUDY_MATERIALS } from '../data/materials';
 
 const STORAGE_KEY = 'ppu_master_progress_v3';
 
@@ -35,6 +36,16 @@ const SUB_TEST_CONFIGS = [
   { name: 'Literasi Bahasa Inggris', category: 'Literasi Inggris', count: 20, time: 900 },
   { name: 'Penalaran Matematika', category: 'Penalaran Matematika', count: 20, time: 1800 },
 ];
+
+const normalizeConcept = (value: string) => value.toLowerCase().replace(/\s+/g, ' ').trim();
+
+const findMaterialForConcept = (concept: string) => {
+  const normalized = normalizeConcept(concept);
+  return STUDY_MATERIALS.find(material => {
+    const materialConcept = normalizeConcept(material.concept);
+    return materialConcept === normalized || materialConcept.includes(normalized) || normalized.includes(materialConcept);
+  });
+};
 
 export function useQuiz() {
   const migrateMaterialMastery = (rawMastery: unknown): MaterialMasteryAccumulator => {
@@ -307,6 +318,12 @@ export function useQuiz() {
       concept: q.concept,
       irtParams: q.irtParams,
     }));
+    const conceptStats = results.reduce((acc, result) => {
+      if (!acc[result.concept]) acc[result.concept] = { total: 0, correct: 0 };
+      acc[result.concept].total += 1;
+      if (result.correct) acc[result.concept].correct += 1;
+      return acc;
+    }, {} as Record<string, { total: number; correct: number }>);
 
     const correctCount = results.filter(r => r.correct).length;
     const today = new Date().toISOString().split('T')[0];
@@ -374,6 +391,20 @@ export function useQuiz() {
       percentile,
       materialMastery: {} as AssessmentReport['materialMastery'],
       recommendations
+      materialMastery,
+      recommendations,
+      remedialConcepts: Object.entries(conceptStats)
+        .map(([concept, stats]) => {
+          const accuracy = Math.round((stats.correct / (stats.total || 1)) * 100);
+          const matchedMaterial = findMaterialForConcept(concept);
+          return {
+            concept,
+            accuracy,
+            materialId: matchedMaterial?.id,
+          };
+        })
+        .sort((a, b) => a.accuracy - b.accuracy)
+        .slice(0, 3)
     };
 
     setProgress(prev => {
@@ -435,6 +466,9 @@ export function useQuiz() {
         currentDifficulty: newDifficulty,
         materialMastery: aggregateMastery,
         reports: [mergedReport, ...prev.reports].slice(0, 10),
+        materialMastery: { ...(prev.materialMastery ?? {}), ...materialMastery },
+        lastRemedialConcepts: report.remedialConcepts ?? [],
+        reports: [report, ...prev.reports].slice(0, 10),
       };
     });
 
