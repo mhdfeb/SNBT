@@ -23,6 +23,8 @@ export interface ConceptProfile {
 export interface UserTarget {
   ptnId: string;
   prodiId: string;
+  examDate: string;
+  baselineScore: number;
 }
 
 export interface SubTestHistoryEntry {
